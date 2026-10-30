@@ -90,6 +90,17 @@ pub fn nack_as_not_ready<E: embedded_hal::i2c::Error>(error: Error<E>) -> Error<
     }
 }
 
+/// Treat a NACK as success, for commands the sensor does not acknowledge
+/// (wake-up, general-call reset).
+pub fn ignore_nack<E: embedded_hal::i2c::Error>(
+    result: Result<(), Error<E>>,
+) -> Result<(), Error<E>> {
+    match result {
+        Err(Error::Bus(e)) if is_nack(&e) => Ok(()),
+        other => other,
+    }
+}
+
 /// Sensirion's common temperature transfer function `-45 + 175 × S / 65535`
 /// in 0.01 °C, rounded (SHT4x, STS4x, SCD4x, SGP4x compensation, ...).
 pub fn temperature_from_ticks(ticks: u16) -> i32 {
@@ -156,6 +167,12 @@ pub mod blocking {
         /// Send raw bytes (8-bit commands, general call).
         pub fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), Error<I2C::Error>> {
             self.i2c.write(self.address, bytes).map_err(Error::bus)
+        }
+
+        /// I2C general-call reset (byte 0x06 to address 0x00). Resets every
+        /// device on the bus that supports it; a NACK is not an error.
+        pub fn general_call_reset(&mut self) -> Result<(), Error<I2C::Error>> {
+            super::ignore_nack(self.i2c.write(0x00, &[0x06]).map_err(Error::bus))
         }
 
         /// Read `out.len()` words and check their CRCs.
@@ -246,6 +263,11 @@ pub mod asynch {
                 .write(self.address, bytes)
                 .await
                 .map_err(Error::bus)
+        }
+
+        /// See [`super::blocking::Interface::general_call_reset`].
+        pub async fn general_call_reset(&mut self) -> Result<(), Error<I2C::Error>> {
+            super::ignore_nack(self.i2c.write(0x00, &[0x06]).await.map_err(Error::bus))
         }
 
         /// See [`super::blocking::Interface::read`].
