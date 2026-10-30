@@ -1,0 +1,15 @@
+[package]
+name = "zigbee-sensor"
+description = "Common traits, units, ZCL conversions and CRC helpers for zigbee-rs sensor drivers"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+embedded-hal.workspace = true
+embedded-hal-async.workspace = true
+
+[lints]
+workspace = true
