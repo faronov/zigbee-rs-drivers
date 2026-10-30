@@ -1,0 +1,19 @@
+[package]
+name = "zigbee-adxl345"
+description = "Analog Devices ADXL343/ADXL345 accelerometer driver with activity/inactivity wake-up and auto-sleep (blocking + async)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+zigbee-sensor.workspace = true
+embedded-hal.workspace = true
+embedded-hal-async.workspace = true
+
+[dev-dependencies]
+embedded-hal-mock.workspace = true
+
+[lints]
+workspace = true
