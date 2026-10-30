@@ -9,7 +9,7 @@ repository.workspace = true
 
 [dependencies]
 zigbee-sensor.workspace = true
-zigbee-onewire = { path = "../onewire", version = "0.1.0" }
+zigbee-onewire.workspace = true
 
 [lints]
 workspace = true

@@ -83,13 +83,13 @@ ZCL column: the cluster the main quantity maps to.
 | stts751 | STTS751 | I2C | 0x0402 | planned |
 | adt7410 | ADT7410, ADT7420 | I2C | 0x0402 | planned |
 | mlx90614 | MLX90614, MLX90615 (IR) | SMBus | 0x0402 | planned |
-| onewire | 1-Wire bus (bit-banged GPIO) | GPIO | - | planned |
-| ds18b20 | DS18B20, DS18S20, DS1822, MAX31820 | 1-Wire | 0x0402 | planned |
-| max31855 | MAX31855 (thermocouple) | SPI | 0x0402 | planned |
-| max6675 | MAX6675 (thermocouple) | SPI | 0x0402 | planned |
-| max31865 | MAX31865 (PT100/PT1000) | SPI | 0x0402 | planned |
-| mcp9600 | MCP9600, MCP9601 (thermocouple) | I2C | 0x0402 | planned |
-| ntc | NTC thermistor via ADC (Beta, Steinhart-Hart) | ADC | 0x0402 | planned |
+| onewire | 1-Wire bus (bit-banged GPIO) | GPIO | - | mock-tested |
+| ds18b20 | DS18B20, DS18S20, DS1822, MAX31820 | 1-Wire | 0x0402 | mock-tested |
+| max31855 | MAX31855 (thermocouple) | SPI | 0x0402 | mock-tested |
+| max6675 | MAX6675 (thermocouple) | SPI | 0x0402 | mock-tested |
+| max31865 | MAX31865 (PT100/PT1000) | SPI | 0x0402 | mock-tested |
+| mcp9600 | MCP9600, MCP9601 (thermocouple) | I2C | 0x0402 | mock-tested |
+| ntc | NTC thermistor via ADC (Beta, Steinhart-Hart) | ADC | 0x0402 | mock-tested |
 
 ## E. Light, colour, UV, proximity
 
