@@ -1,0 +1,433 @@
+//! NXP P3T1755 ±0.5 °C digital temperature sensor (I2C mode; also an I3C
+//! target, which this driver does not use).
+//!
+//! [`configure`](P3t1755::configure) leaves the sensor in shutdown
+//! (0.2 µA typ.); every
+//! [`start_measurement`](zigbee_sensor::blocking::Sensor::start_measurement)
+//! sets the OS bit for one 12-bit conversion (12 ms max), after which the
+//! part returns to shutdown by itself.
+//!
+//! Reference: NXP "P3T1755 I3C, I2C-bus Interface, 0.5 °C Accuracy, Digital
+//! Temperature Sensor", product data sheet Rev. 1.3 (28 August 2025).
+//!
+//! ```ignore
+//! let mut t = P3t1755::new(i2c, ADDRESS_DEFAULT);
+//! t.configure()?;
+//! let wait_us = t.start_measurement()?;
+//! // ... let the Zigbee stack run / sleep for wait_us ...
+//! let m = t.read_measurement()?;
+//! ```
+//!
+//! The blocking driver and its [`asynch`] twin are generated from one macro
+//! body, so they issue identical bus transactions.
+
+#![no_std]
+
+use zigbee_sensor::{Error, Quantity, Readings, WaitUs};
+
+/// Address with A2 = A1 = A0 = GND. The three tri-state pins (GND / VCC /
+/// SDA / SCL) select 32 addresses in 0x40..=0x5F (data sheet table 4).
+pub const ADDRESS_DEFAULT: u8 = 0x48;
+
+/// Maximum one-shot conversion time (12 ms; 7.8 ms typ.).
+pub const CONVERSION_WAIT_US: WaitUs = 12_000;
+
+const REG_TEMPERATURE: u8 = 0x00;
+const REG_CONFIG: u8 = 0x01;
+const REG_T_LOW: u8 = 0x02;
+const REG_T_HIGH: u8 = 0x03;
+
+const CFG_OS: u8 = 1 << 7;
+const CFG_POL: u8 = 1 << 2;
+const CFG_TM: u8 = 1 << 1;
+const CFG_SD: u8 = 1 << 0;
+
+/// Continuous-mode conversion period (R1:R0). Resolution is always 12 bit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ConversionRate {
+    /// 27.5 ms.
+    Ms27_5,
+    /// 55 ms (power-on default).
+    #[default]
+    Ms55,
+    /// 110 ms.
+    Ms110,
+    /// 220 ms (lowest continuous current, 4.1 µA typ.).
+    Ms220,
+}
+
+/// Consecutive faults before ALERT changes (F1:F0).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FaultQueue {
+    /// 1 fault.
+    One,
+    /// 2 faults (power-on default).
+    #[default]
+    Two,
+    /// 4 faults.
+    Four,
+    /// 6 faults.
+    Six,
+}
+
+/// ALERT pin behaviour (TM bit).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AlertMode {
+    /// Active while `T >= T_HIGH`, released when `T < T_LOW`.
+    #[default]
+    Comparator,
+    /// Latched until a register read or the SMBus alert response; also
+    /// cleared by entering shutdown.
+    Interrupt,
+}
+
+/// Configuration written by [`P3t1755::configure`] and every one-shot.
+/// The default equals the power-on value (0x28 without SD).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Config {
+    /// Period used in continuous mode.
+    pub conversion_rate: ConversionRate,
+    /// ALERT fault queue.
+    pub fault_queue: FaultQueue,
+    /// ALERT comparator / interrupt mode.
+    pub alert_mode: AlertMode,
+    /// ALERT active high (`POL = 1`) instead of active low.
+    pub alert_active_high: bool,
+}
+
+impl Config {
+    /// Configuration register byte for this configuration.
+    pub const fn register(self, shutdown: bool, one_shot: bool) -> u8 {
+        let mut byte = ((self.conversion_rate as u8) << 5) | ((self.fault_queue as u8) << 3);
+        if self.alert_active_high {
+            byte |= CFG_POL;
+        }
+        if matches!(self.alert_mode, AlertMode::Interrupt) {
+            byte |= CFG_TM;
+        }
+        if shutdown {
+            byte |= CFG_SD;
+        }
+        if one_shot {
+            byte |= CFG_OS;
+        }
+        byte
+    }
+}
+
+/// One temperature sample.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Measurement {
+    /// Temperature in 0.01 °C.
+    pub temperature: i32,
+}
+
+impl Readings for Measurement {
+    fn for_each(&self, f: &mut dyn FnMut(Quantity)) {
+        f(Quantity::Temperature(self.temperature));
+    }
+}
+
+/// Decode the 12-bit left-justified temperature register (tables 16–18).
+/// Returns `None` if the always-zero low nibble is set (e.g. `0xFFFF` from a
+/// missing device).
+pub const fn decode_temperature(raw: u16) -> Option<i32> {
+    if raw & 0x000F != 0 {
+        return None;
+    }
+    let counts = (raw as i16 >> 4) as i32;
+    Some((counts * 100 + 8) >> 4)
+}
+
+/// Encode a limit in 0.01 °C into the `T_LOW`/`T_HIGH` format, saturating.
+pub const fn encode_limit(centi_celsius: i32) -> u16 {
+    let counts = (centi_celsius * 16 + 50).div_euclid(100);
+    let c = if counts < -2048 {
+        -2048
+    } else if counts > 2047 {
+        2047
+    } else {
+        counts
+    };
+    (c << 4) as u16
+}
+
+macro_rules! constructors {
+    () => {
+        /// Create a driver with the default [`Config`]; no bus traffic.
+        pub const fn new(i2c: I2C, address: u8) -> Self {
+            Self {
+                i2c,
+                address,
+                config: Config {
+                    conversion_rate: ConversionRate::Ms55,
+                    fault_queue: FaultQueue::Two,
+                    alert_mode: AlertMode::Comparator,
+                    alert_active_high: false,
+                },
+            }
+        }
+
+        /// Use `config` for [`Self::configure`] and later mode changes.
+        pub const fn with_config(mut self, config: Config) -> Self {
+            self.config = config;
+            self
+        }
+
+        /// The active configuration.
+        pub const fn config(&self) -> Config {
+            self.config
+        }
+
+        /// Give the bus back.
+        pub fn release(self) -> I2C {
+            self.i2c
+        }
+    };
+}
+
+macro_rules! driver_impl {
+    ($i2c:path, $sensor:path, $low_power:path, $($async:ident)?; $($await:tt)*) => {
+        impl<I2C: $i2c> P3t1755<I2C> {
+            $($async)? fn write_register(&mut self, register: u8, value: u16) -> Result<(), Error<I2C::Error>> {
+                let [hi, lo] = value.to_be_bytes();
+                self.i2c
+                    .write(self.address, &[register, hi, lo])
+                    $($await)*
+                    .map_err(Error::bus)
+            }
+
+            $($async)? fn read_register(&mut self, register: u8) -> Result<u16, Error<I2C::Error>> {
+                let mut buf = [0u8; 2];
+                self.i2c
+                    .write_read(self.address, &[register], &mut buf)
+                    $($await)*
+                    .map_err(Error::bus)?;
+                Ok(u16::from_be_bytes(buf))
+            }
+
+            $($async)? fn write_config(&mut self, byte: u8) -> Result<(), Error<I2C::Error>> {
+                self.i2c
+                    .write(self.address, &[REG_CONFIG, byte])
+                    $($await)*
+                    .map_err(Error::bus)
+            }
+
+            /// Read the 8-bit configuration register (OS always reads 0).
+            pub $($async)? fn read_config(&mut self) -> Result<u8, Error<I2C::Error>> {
+                let mut buf = [0u8; 1];
+                self.i2c
+                    .write_read(self.address, &[REG_CONFIG], &mut buf)
+                    $($await)*
+                    .map_err(Error::bus)?;
+                Ok(buf[0])
+            }
+
+            /// Write the configuration and enter shutdown. Call once after
+            /// power-up (wait 20 ms after VCC ramps): the part starts in
+            /// continuous mode.
+            pub $($async)? fn configure(&mut self) -> Result<(), Error<I2C::Error>> {
+                self.write_config(self.config.register(true, false)) $($await)*
+            }
+
+            /// Change the configuration and write it (enters shutdown).
+            pub $($async)? fn set_config(&mut self, config: Config) -> Result<(), Error<I2C::Error>> {
+                self.config = config;
+                self.configure() $($await)*
+            }
+
+            /// Program the ALERT thresholds in 0.01 °C (0.0625 °C steps).
+            /// In comparator mode `low` is the release point (hysteresis).
+            pub $($async)? fn set_limits(&mut self, low: i32, high: i32) -> Result<(), Error<I2C::Error>> {
+                self.write_register(REG_T_LOW, encode_limit(low)) $($await)*?;
+                self.write_register(REG_T_HIGH, encode_limit(high)) $($await)*
+            }
+        }
+
+        impl<I2C: $i2c> $sensor for P3t1755<I2C> {
+            type BusError = I2C::Error;
+            type Measurement = Measurement;
+
+            /// One-shot conversion from shutdown (OS = 1, SD = 1).
+            $($async)? fn start_measurement(&mut self) -> Result<WaitUs, Error<I2C::Error>> {
+                self.write_config(self.config.register(true, true)) $($await)*?;
+                Ok(CONVERSION_WAIT_US)
+            }
+
+            $($async)? fn read_measurement(&mut self) -> Result<Measurement, Error<I2C::Error>> {
+                let raw = self.read_register(REG_TEMPERATURE) $($await)*?;
+                match decode_temperature(raw) {
+                    Some(temperature) => Ok(Measurement { temperature }),
+                    None => Err(Error::InvalidData),
+                }
+            }
+        }
+
+        impl<I2C: $i2c> $low_power for P3t1755<I2C> {
+            type BusError = I2C::Error;
+
+            /// Shutdown (SD = 1).
+            $($async)? fn sleep(&mut self) -> Result<(), Error<I2C::Error>> {
+                self.configure() $($await)*
+            }
+
+            /// Continuous conversion at the configured period. Returns the
+            /// wait until the first result.
+            $($async)? fn wake(&mut self) -> Result<WaitUs, Error<I2C::Error>> {
+                self.write_config(self.config.register(false, false)) $($await)*?;
+                Ok(CONVERSION_WAIT_US)
+            }
+        }
+    };
+}
+
+/// Blocking driver.
+pub struct P3t1755<I2C> {
+    i2c: I2C,
+    address: u8,
+    config: Config,
+}
+
+impl<I2C> P3t1755<I2C> {
+    constructors!();
+}
+
+driver_impl!(
+    embedded_hal::i2c::I2c,
+    zigbee_sensor::blocking::Sensor,
+    zigbee_sensor::blocking::LowPower,
+    ;
+);
+
+/// Async driver.
+pub mod asynch {
+    use super::*;
+
+    /// Async twin of [`super::P3t1755`].
+    pub struct P3t1755<I2C> {
+        i2c: I2C,
+        address: u8,
+        config: Config,
+    }
+
+    impl<I2C> P3t1755<I2C> {
+        constructors!();
+    }
+
+    driver_impl!(
+        embedded_hal_async::i2c::I2c,
+        zigbee_sensor::asynch::Sensor,
+        zigbee_sensor::asynch::LowPower,
+        async; .await
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    extern crate std;
+
+    use super::*;
+    use embedded_hal_mock::eh1::i2c::{Mock, Transaction};
+    use std::vec;
+    use zigbee_sensor::blocking::{LowPower, Sensor};
+
+    const A: u8 = ADDRESS_DEFAULT;
+
+    #[test]
+    fn decodes_datasheet_table() {
+        // Table 18 (12-bit value left-justified by 4).
+        assert_eq!(decode_temperature(0x7FF0), Some(12_794));
+        assert_eq!(decode_temperature(0x6400), Some(10_000));
+        assert_eq!(decode_temperature(0x4B00), Some(7_500));
+        assert_eq!(decode_temperature(0x1900), Some(2_500));
+        assert_eq!(decode_temperature(0x0040), Some(25));
+        assert_eq!(decode_temperature(0x0000), Some(0));
+        assert_eq!(decode_temperature(0xFFC0), Some(-25));
+        assert_eq!(decode_temperature(0xE700), Some(-2_500));
+        assert_eq!(decode_temperature(0xD800), Some(-4_000));
+        assert_eq!(decode_temperature(0xFFFF), None);
+    }
+
+    #[test]
+    fn limits_and_config_byte() {
+        // Power-on: T_LOW = 4B00h (75 °C), T_HIGH = 5000h (80 °C), Conf 28h.
+        assert_eq!(encode_limit(7_500), 0x4B00);
+        assert_eq!(encode_limit(8_000), 0x5000);
+        assert_eq!(encode_limit(-30_000), 0x8000);
+        assert_eq!(encode_limit(30_000), 0x7FF0);
+        assert_eq!(Config::default().register(false, false), 0x28);
+        let c = Config {
+            conversion_rate: ConversionRate::Ms220,
+            fault_queue: FaultQueue::Six,
+            alert_mode: AlertMode::Interrupt,
+            alert_active_high: true,
+        };
+        assert_eq!(c.register(true, true), 0xFF);
+    }
+
+    #[test]
+    fn one_shot_then_read() {
+        let expectations = [
+            Transaction::write(A, vec![REG_CONFIG, 0x29]),
+            Transaction::write(A, vec![REG_CONFIG, 0xA9]),
+            Transaction::write_read(A, vec![REG_TEMPERATURE], vec![0x19, 0x00]),
+            Transaction::write_read(A, vec![REG_TEMPERATURE], vec![0xFF, 0xFF]),
+        ];
+        let mut i2c = Mock::new(&expectations);
+        let mut t = P3t1755::new(&mut i2c, A);
+        t.configure().unwrap();
+        assert_eq!(t.start_measurement().unwrap(), 12_000);
+        assert_eq!(t.read_measurement().unwrap().temperature, 2_500);
+        assert_eq!(t.read_measurement(), Err(Error::InvalidData));
+        i2c.done();
+    }
+
+    #[test]
+    fn limits_config_sleep_wake() {
+        let config = Config {
+            fault_queue: FaultQueue::One,
+            alert_active_high: true,
+            ..Config::default()
+        };
+        let expectations = [
+            Transaction::write(A, vec![REG_T_LOW, 0x1E, 0x00]),
+            Transaction::write(A, vec![REG_T_HIGH, 0x23, 0x80]),
+            Transaction::write(A, vec![REG_CONFIG, 0x25]),
+            Transaction::write_read(A, vec![REG_CONFIG], vec![0x25]),
+            Transaction::write(A, vec![REG_CONFIG, 0x24]),
+        ];
+        let mut i2c = Mock::new(&expectations);
+        let mut t = P3t1755::new(&mut i2c, A);
+        t.set_limits(3_000, 3_550).unwrap();
+        t.set_config(config).unwrap();
+        assert_eq!(t.read_config().unwrap(), 0x25);
+        assert_eq!(t.wake().unwrap(), CONVERSION_WAIT_US);
+        i2c.done();
+    }
+
+    #[test]
+    fn async_one_shot() {
+        use zigbee_sensor::asynch::{LowPower as _, Sensor as _};
+        let expectations = [
+            Transaction::write(A, vec![REG_CONFIG, 0x29]),
+            Transaction::write(A, vec![REG_CONFIG, 0xA9]),
+            Transaction::write_read(A, vec![REG_TEMPERATURE], vec![0xE7, 0x00]),
+        ];
+        let mut i2c = Mock::new(&expectations);
+        let mut t = asynch::P3t1755::new(&mut i2c, A);
+        block_on(t.sleep()).unwrap();
+        assert_eq!(block_on(t.start_measurement()).unwrap(), 12_000);
+        assert_eq!(block_on(t.read_measurement()).unwrap().temperature, -2_500);
+        i2c.done();
+    }
+
+    fn block_on<F: core::future::Future>(fut: F) -> F::Output {
+        let mut cx = core::task::Context::from_waker(core::task::Waker::noop());
+        let mut fut = core::pin::pin!(fut);
+        loop {
+            if let core::task::Poll::Ready(v) = fut.as_mut().poll(&mut cx) {
+                return v;
+            }
+        }
+    }
+}
