@@ -9,19 +9,20 @@ ZCL column: the cluster the main quantity maps to.
 
 | Crate | Parts | Bus | ZCL | Status |
 |---|---|---|---|---|
+| sensirion-common | Word+CRC framing, I2C interface, general-call reset | I2C | - | mock-tested |
 | sht3x | SHT30, SHT31, SHT35 (GXHT30 clone) | I2C | 0x0402, 0x0405 | mock-tested |
-| sht4x | SHT40, SHT41, SHT43, SHT45 | I2C | 0x0402, 0x0405 | planned |
-| shtc3 | SHTC1, SHTC3 | I2C | 0x0402, 0x0405 | planned |
-| sts4x | STS40, STS45 | I2C | 0x0402 | planned |
-| scd4x | SCD40, SCD41, SCD43 | I2C | 0x040D | planned |
-| scd30 | SCD30 | I2C | 0x040D | planned |
-| stcc4 | STCC4 | I2C | 0x040D | planned |
-| sgp4x | SGP40, SGP41 (+ gas index algorithm) | I2C | VOC/NOx index | planned |
-| sgp30 | SGP30 | I2C | TVOC, eCO2 | planned |
-| sps30 | SPS30 | I2C | 0x042A | planned |
-| sen5x | SEN50, SEN54, SEN55 | I2C | 0x042A, 0x0402, 0x0405 | planned |
-| sen6x | SEN60, SEN63C, SEN65, SEN66, SEN68 | I2C | 0x042A, 0x040D | planned |
-| sfa3x | SFA30 | I2C | 0x042B | planned |
+| sht4x | SHT40, SHT41, SHT43, SHT45 | I2C | 0x0402, 0x0405 | mock-tested |
+| shtc3 | SHTC1, SHTC3 | I2C | 0x0402, 0x0405 | mock-tested |
+| sts4x | STS40, STS45 | I2C | 0x0402 | mock-tested |
+| scd4x | SCD40, SCD41, SCD43 | I2C | 0x040D | mock-tested |
+| scd30 | SCD30 | I2C | 0x040D | mock-tested |
+| stcc4 | STCC4 | I2C | 0x040D | mock-tested |
+| sgp4x | SGP40, SGP41 (+ gas index algorithm) | I2C | VOC/NOx index | mock-tested |
+| sgp30 | SGP30 | I2C | TVOC, eCO2 | mock-tested |
+| sps30 | SPS30 | I2C | 0x042A | mock-tested |
+| sen5x | SEN50, SEN54, SEN55 | I2C | 0x042A, 0x0402, 0x0405 | mock-tested |
+| sen6x | SEN60, SEN62, SEN63C, SEN65, SEN66, SEN68, SEN69C | I2C | 0x042A, 0x040D | mock-tested |
+| sfa3x | SFA30 | I2C | 0x042B | mock-tested |
 
 ## B. Pressure and environmental (Bosch, Infineon, TE, ST, Goertek, TDK)
 
@@ -181,16 +182,16 @@ ZCL column: the cluster the main quantity maps to.
 
 | Crate | Parts | Bus | ZCL | Status |
 |---|---|---|---|---|
-| adxl345 | ADXL343, ADXL345 | I2C/SPI | vibration, tilt | planned |
-| adxl362 | ADXL362 | SPI | vibration, tilt | planned |
-| adxl367 | ADXL367 | I2C/SPI | vibration, tilt | planned |
-| lis2dh | LIS2DH12, LIS3DH, SC7A20 | I2C/SPI | vibration, tilt | planned |
-| lis2dw12 | LIS2DW12 | I2C/SPI | vibration, tilt | planned |
-| lis2du12 | LIS2DU12 | I2C/SPI | vibration, tilt | planned |
-| bma400 | BMA400 | I2C/SPI | vibration, tilt | planned |
-| mc3419 | MC3419, MC3479 | I2C/SPI | vibration, tilt | planned |
-| kxtj3 | KXTJ3-1057 | I2C | vibration, tilt | planned |
-| da217 | DA217, DA218 | I2C | vibration, tilt | planned |
+| adxl345 | ADXL343, ADXL345 | I2C/SPI | vibration, tilt | mock-tested |
+| adxl362 | ADXL362 | SPI | vibration, tilt | mock-tested |
+| adxl367 | ADXL367 | I2C/SPI | vibration, tilt | mock-tested |
+| lis2dh | LIS2DH12, LIS3DH, SC7A20 | I2C/SPI | vibration, tilt | mock-tested |
+| lis2dw12 | LIS2DW12 | I2C/SPI | vibration, tilt | mock-tested |
+| lis2du12 | LIS2DU12 | I2C/SPI | vibration, tilt | mock-tested |
+| bma400 | BMA400 | I2C/SPI | vibration, tilt | mock-tested |
+| mc3419 | MC3419, MC3479 | I2C/SPI | vibration, tilt | mock-tested |
+| kxtj3 | KXTJ3-1057 | I2C | vibration, tilt | mock-tested |
+| da217 | DA217, DA218 | I2C | vibration, tilt | mock-tested |
 | lsm6dso | LSM6DS3, LSM6DSL, LSM6DSO, LSM6DSOX | I2C/SPI | vibration, tilt | planned |
 | mpu6050 | MPU-6050, MPU-6500, MPU-9250 (accel/gyro) | I2C | vibration, tilt | planned |
 | icm426xx | ICM-42605, ICM-42688-P, ICM-42670-P | I2C/SPI | vibration, tilt | planned |

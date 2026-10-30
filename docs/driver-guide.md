@@ -54,7 +54,12 @@ device. So:
 * Errors: `zigbee_sensor::Error<BusError>`. Map transport errors with
   `.map_err(Error::bus)`. Use `Error::NotReady` when the device reports data
   not ready, `Error::UnexpectedId` for chip-ID checks, `Error::Crc` for
-  checksums.
+  checksums, `Error::InvalidArgument` for caller arguments outside the
+  part's range. `NotReady` carries no wait hint: the caller retries after
+  its own back-off (the expected wait is what `start_measurement` returned).
+* A reset or wake that uses the I2C general call (address 0x00) reaches
+  every device on the bus. Name it `general_call_reset()` or similar and
+  say so in its doc comment and the crate README.
 * Expose a `probe()`/`check_id()` when the part has an ID register.
 * Free-running/continuous parts: `start_measurement()` may return `0` and
   `read_measurement()` returns `NotReady` until a fresh sample exists.

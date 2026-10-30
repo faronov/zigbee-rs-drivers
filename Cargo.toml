@@ -12,6 +12,7 @@ repository = "https://github.com/faronov/zigbee-rs-drivers"
 [workspace.dependencies]
 zigbee-sensor = { path = "core" }
 zigbee-onewire = { path = "drivers/onewire" }
+zigbee-sensirion-common = { path = "drivers/sensirion-common" }
 embedded-hal = "1.0"
 embedded-hal-async = "1.0"
 embedded-io = "0.6"

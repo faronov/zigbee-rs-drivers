@@ -9,7 +9,7 @@ repository.workspace = true
 
 [dependencies]
 zigbee-sensor.workspace = true
-zigbee-sensirion-common = { path = "../sensirion-common", version = "0.1.0" }
+zigbee-sensirion-common.workspace = true
 embedded-hal.workspace = true
 embedded-hal-async.workspace = true
 

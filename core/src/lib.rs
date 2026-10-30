@@ -43,6 +43,8 @@ pub enum Error<E> {
     Timeout,
     /// The requested configuration is not supported by this part.
     Unsupported,
+    /// A caller-supplied argument is out of the range the part accepts.
+    InvalidArgument,
 }
 
 impl<E> Error<E> {

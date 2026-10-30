@@ -2,3 +2,11 @@ zigbee-rs-drivers
 Copyright (c) 2026 zigbee-rs-drivers contributors
 
 This product includes no third-party code unless listed below.
+
+drivers/sgp4x/src/gas_index.rs
+  Rust port of the Sensirion Gas Index Algorithm 3.2.2
+  (https://github.com/Sensirion/gas-index-algorithm), fixed-point variant.
+  Copyright (c) 2022, Sensirion AG. All rights reserved.
+  Licensed under the BSD 3-Clause License; the full license text is
+  reproduced in the header of that file. Its fix16 arithmetic follows
+  libfixmath (https://github.com/PetteriAimonen/libfixmath, MIT License).

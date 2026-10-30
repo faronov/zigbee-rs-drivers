@@ -44,6 +44,9 @@ pub enum Quantity {
     NoxIndex(u16),
     /// Device air-quality index (e.g. UBA AQI 1..=5).
     AirQualityIndex(u16),
+    /// Relative air-quality index against the device's own baseline
+    /// (e.g. ScioSense AQI-S, 0..=500, 100 = average).
+    RelativeAirQualityIndex(u16),
     /// Formaldehyde in ppb (ZCL 0x042B).
     Formaldehyde(u32),
     /// PM1.0 mass concentration in 0.1 µg/m³.
@@ -54,6 +57,25 @@ pub enum Quantity {
     Pm4(u32),
     /// PM10 mass concentration in 0.1 µg/m³.
     Pm10(u32),
+    /// Number concentration of particles up to `size_nm` (Sensirion NC
+    /// bins), in 0.01 #/cm³ (= particles per 0.1 L).
+    ParticlesBelow {
+        /// Upper particle diameter bound in nm (e.g. 2500 for NC2.5).
+        size_nm: u16,
+        /// Concentration in 0.01 #/cm³.
+        count: u32,
+    },
+    /// Number concentration of particles at or above `size_nm`
+    /// (Plantower/Honeywell ">0.3 µm" style bins), in 0.01 #/cm³
+    /// (= particles per 0.1 L).
+    ParticlesAbove {
+        /// Lower particle diameter bound in nm (e.g. 300 for >0.3 µm).
+        size_nm: u16,
+        /// Concentration in 0.01 #/cm³.
+        count: u32,
+    },
+    /// Typical (number-weighted) particle size in nm.
+    TypicalParticleSize(u32),
     /// Gas-sensor heater resistance in Ω (raw BME680-style output).
     GasResistance(u32),
     /// Voltage in mV.
