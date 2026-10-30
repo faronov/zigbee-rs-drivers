@@ -1,0 +1,25 @@
+[package]
+name = "zigbee-bmi270"
+description = "Bosch BMI270 accelerometer + gyroscope driver (I2C/SPI, blocking + async)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = ["config-blob"]
+# Bundle Bosch's 8 KB BMI270 configuration file (BSD-3-Clause, see
+# src/config_file.rs). Without it, pass the file to `with_config_file`.
+config-blob = []
+
+[dependencies]
+zigbee-sensor.workspace = true
+embedded-hal.workspace = true
+embedded-hal-async.workspace = true
+
+[dev-dependencies]
+embedded-hal-mock.workspace = true
+
+[lints]
+workspace = true
