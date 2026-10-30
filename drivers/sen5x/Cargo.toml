@@ -1,0 +1,20 @@
+[package]
+name = "zigbee-sen5x"
+description = "Sensirion SEN50/SEN54/SEN55 environmental sensor node driver for zigbee-rs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+zigbee-sensor.workspace = true
+zigbee-sensirion-common = { path = "../sensirion-common", version = "0.1.0" }
+embedded-hal.workspace = true
+embedded-hal-async.workspace = true
+
+[dev-dependencies]
+embedded-hal-mock.workspace = true
+
+[lints]
+workspace = true

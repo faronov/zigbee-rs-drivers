@@ -1,0 +1,20 @@
+[package]
+name = "zigbee-scd4x"
+description = "Sensirion SCD40/SCD41/SCD43 CO2, temperature and humidity driver (blocking + async)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+zigbee-sensor.workspace = true
+zigbee-sensirion-common = { path = "../sensirion-common", version = "0.1.0" }
+embedded-hal.workspace = true
+embedded-hal-async.workspace = true
+
+[dev-dependencies]
+embedded-hal-mock.workspace = true
+
+[lints]
+workspace = true
