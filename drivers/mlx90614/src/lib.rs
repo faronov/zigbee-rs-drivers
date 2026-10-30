@@ -149,10 +149,10 @@ pub struct Measurement {
 }
 
 impl Readings for Measurement {
-    /// Object first, then ambient, both as
-    /// [`Quantity::Temperature`].
+    /// [`Quantity::ObjectTemperature`] for the object, then
+    /// [`Quantity::Temperature`] for the ambient.
     fn for_each(&self, f: &mut dyn FnMut(Quantity)) {
-        f(Quantity::Temperature(self.object));
+        f(Quantity::ObjectTemperature(self.object));
         f(Quantity::Temperature(self.ambient));
     }
 }

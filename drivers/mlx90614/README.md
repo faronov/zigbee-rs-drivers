@@ -22,9 +22,8 @@ SMBus with PEC. They report the object temperature and the ambient
 * PEC is CRC-8 with polynomial 0x07 over every byte, including the address
   bytes. Reads with a bad PEC return `Error::Crc`. A RAM word with the
   error flag (bit 15) set returns `Error::InvalidData`.
-* `Readings` emits two `Quantity::Temperature` values: the object
-  temperature first, then the ambient temperature. The core has no
-  dedicated object-temperature quantity.
+* `Readings` emits `Quantity::ObjectTemperature` for the object, then
+  `Quantity::Temperature` for the ambient (package) temperature.
 * The sensor converts continuously. `start_measurement()` issues no bus
   traffic and returns 0; `read_measurement()` reads the latest object and
   ambient values. `read_object2()` reads zone 2 of dual-zone MLX90614

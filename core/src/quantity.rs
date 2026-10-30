@@ -21,6 +21,9 @@ pub struct Vector3 {
 pub enum Quantity {
     /// Temperature in 0.01 °C (ZCL 0x0402 MeasuredValue).
     Temperature(i32),
+    /// Remote (object) temperature seen by an IR thermometer, in 0.01 °C.
+    /// `Temperature` from the same part is its die/ambient temperature.
+    ObjectTemperature(i32),
     /// Relative humidity in 0.01 %RH (ZCL 0x0405).
     Humidity(u16),
     /// Absolute pressure in Pa (ZCL 0x0403).

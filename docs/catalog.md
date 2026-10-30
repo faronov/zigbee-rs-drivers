@@ -69,20 +69,20 @@ ZCL column: the cluster the main quantity maps to.
 
 | Crate | Parts | Bus | ZCL | Status |
 |---|---|---|---|---|
-| tmp102 | TMP102, TMP112 | I2C | 0x0402 | planned |
-| tmp108 | TMP108 | I2C | 0x0402 | planned |
-| tmp114 | TMP114 | I2C | 0x0402 | planned |
-| tmp11x | TMP116, TMP117, TMP119 | I2C | 0x0402 | planned |
-| tmp1075 | TMP1075 | I2C | 0x0402 | planned |
-| lm75 | LM75A, LM75B, PCT2075, TMP75, NCT75 | I2C | 0x0402 | planned |
-| mcp9808 | MCP9808, JC-42.4 sensors | I2C | 0x0402 | planned |
-| max31875 | MAX31875 | I2C | 0x0402 | planned |
-| p3t1755 | P3T1755 | I2C | 0x0402 | planned |
-| tcn75a | TCN75A, MCP9800/01/02/03 | I2C | 0x0402 | planned |
-| stts22h | STTS22H | I2C | 0x0402 | planned |
-| stts751 | STTS751 | I2C | 0x0402 | planned |
-| adt7410 | ADT7410, ADT7420 | I2C | 0x0402 | planned |
-| mlx90614 | MLX90614, MLX90615 (IR) | SMBus | 0x0402 | planned |
+| tmp102 | TMP102, TMP112 | I2C | 0x0402 | mock-tested |
+| tmp108 | TMP108 | I2C | 0x0402 | mock-tested |
+| tmp114 | TMP114 | I2C | 0x0402 | mock-tested |
+| tmp11x | TMP116, TMP117, TMP119 | I2C | 0x0402 | mock-tested |
+| tmp1075 | TMP1075 | I2C | 0x0402 | mock-tested |
+| lm75 | LM75A, LM75B, PCT2075, TMP75, NCT75 | I2C | 0x0402 | mock-tested |
+| mcp9808 | MCP9808, JC-42.4 sensors | I2C | 0x0402 | mock-tested |
+| max31875 | MAX31875 | I2C | 0x0402 | mock-tested |
+| p3t1755 | P3T1755 | I2C | 0x0402 | mock-tested |
+| tcn75a | TCN75A, MCP9800/01/02/03 | I2C | 0x0402 | mock-tested |
+| stts22h | STTS22H | I2C | 0x0402 | mock-tested |
+| stts751 | STTS751 | I2C | 0x0402 | mock-tested |
+| adt7410 | ADT7410, ADT7420 | I2C | 0x0402 | mock-tested |
+| mlx90614 | MLX90614, MLX90615 (IR) | SMBus | 0x0402 | mock-tested |
 | onewire | 1-Wire bus (bit-banged GPIO) | GPIO | - | mock-tested |
 | ds18b20 | DS18B20, DS18S20, DS1822, MAX31820 | 1-Wire | 0x0402 | mock-tested |
 | max31855 | MAX31855 (thermocouple) | SPI | 0x0402 | mock-tested |
