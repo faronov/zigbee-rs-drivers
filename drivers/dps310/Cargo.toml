@@ -1,0 +1,19 @@
+[package]
+name = "zigbee-dps310"
+description = "Infineon DPS310 / DPS368 pressure and temperature driver (I2C/SPI, blocking + async)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+zigbee-sensor.workspace = true
+embedded-hal.workspace = true
+embedded-hal-async.workspace = true
+
+[dev-dependencies]
+embedded-hal-mock.workspace = true
+
+[lints]
+workspace = true
