@@ -1,0 +1,19 @@
+[package]
+name = "zigbee-ld2410"
+description = "Hi-Link HLK-LD2410 / LD2410B / LD2410C 24 GHz presence radar UART driver (blocking + async)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+zigbee-sensor.workspace = true
+embedded-io.workspace = true
+embedded-io-async.workspace = true
+
+[dev-dependencies]
+embedded-hal-mock.workspace = true
+
+[lints]
+workspace = true
