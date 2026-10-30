@@ -1,0 +1,19 @@
+[package]
+name = "zigbee-lis2du12"
+description = "ST LIS2DU12 ultra-low-power accelerometer driver with one-shot conversion and wake-up interrupts (blocking + async)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+zigbee-sensor.workspace = true
+embedded-hal.workspace = true
+embedded-hal-async.workspace = true
+
+[dev-dependencies]
+embedded-hal-mock.workspace = true
+
+[lints]
+workspace = true

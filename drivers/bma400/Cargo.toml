@@ -1,0 +1,19 @@
+[package]
+name = "zigbee-bma400"
+description = "Bosch BMA400 ultra-low-power I2C/SPI accelerometer driver with low-power wake-up interrupt, auto wake-up/low-power and generic activity interrupts (blocking + async)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+zigbee-sensor.workspace = true
+embedded-hal.workspace = true
+embedded-hal-async.workspace = true
+
+[dev-dependencies]
+embedded-hal-mock.workspace = true
+
+[lints]
+workspace = true
