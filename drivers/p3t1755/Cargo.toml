@@ -1,0 +1,19 @@
+[package]
+name = "zigbee-p3t1755"
+description = "NXP P3T1755 I2C temperature sensor driver for zigbee-rs (one-shot, ALERT thresholds)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+zigbee-sensor.workspace = true
+embedded-hal.workspace = true
+embedded-hal-async.workspace = true
+
+[dev-dependencies]
+embedded-hal-mock.workspace = true
+
+[lints]
+workspace = true
