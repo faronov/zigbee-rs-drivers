@@ -1,0 +1,19 @@
+[package]
+name = "zigbee-ze08"
+description = "Winsen ZE08-CH2O / ZE07-CH2O electrochemical formaldehyde module driver (UART, blocking + async)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+zigbee-sensor.workspace = true
+embedded-io.workspace = true
+embedded-io-async.workspace = true
+
+[dev-dependencies]
+embedded-hal-async.workspace = true
+
+[lints]
+workspace = true

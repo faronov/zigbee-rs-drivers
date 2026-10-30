@@ -1,0 +1,19 @@
+[package]
+name = "zigbee-explorir"
+description = "GSS/SST ExplorIR, SprintIR, CozIR (and MISIR/MinIR) NDIR CO2 sensor driver (ASCII UART, blocking + async)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+zigbee-sensor.workspace = true
+embedded-io.workspace = true
+embedded-io-async.workspace = true
+
+[dev-dependencies]
+embedded-hal-async.workspace = true
+
+[lints]
+workspace = true
