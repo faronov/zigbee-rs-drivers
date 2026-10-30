@@ -6,9 +6,9 @@
 //! (0.1 µA typ.) on its own. The returned wait is the datasheet maximum
 //! measurement time for the configured oversampling.
 //!
-//! Compensation uses the 32-bit integer formulas of the datasheets (no
-//! 64-bit arithmetic): temperature in 0.01 °C, pressure in Pa, humidity in
-//! 0.01 %RH.
+//! Compensation uses the integer formulas of the datasheets (32-bit for
+//! temperature and humidity, 64-bit for pressure): temperature in 0.01 °C,
+//! pressure in Pa, humidity in 0.01 %RH.
 //!
 //! References:
 //! * Bosch "BME280 Combined humidity and pressure sensor" datasheet,
