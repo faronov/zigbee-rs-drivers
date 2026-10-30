@@ -256,26 +256,28 @@ impl Calibration {
 
     /// First- and second-order compensation of the raw pressure `d1` and
     /// temperature `d2` (datasheet "Pressure and temperature calculation"
-    /// and "Second order temperature compensation").
+    /// and "Second order temperature compensation"). Divisions by 2^n are
+    /// arithmetic shifts (floor), which is what the datasheet example
+    /// values are computed with and avoids 64-bit division on Cortex-M0.
     pub fn compensate(&self, variant: Variant, d1: u32, d2: u32) -> Measurement {
         let dt = i64::from(d2) - (i64::from(self.c5) << 8);
-        let mut temp = 2000 + dt * i64::from(self.c6) / (1 << 23);
+        let mut temp = 2000 + ((dt * i64::from(self.c6)) >> 23);
         let (c2_shift, c4_shift, c1_shift, c3_shift) = variant.first_order();
-        let mut off = (i64::from(self.c2) << c2_shift) + i64::from(self.c4) * dt / (1 << c4_shift);
-        let mut sens = (i64::from(self.c1) << c1_shift) + i64::from(self.c3) * dt / (1 << c3_shift);
+        let mut off = (i64::from(self.c2) << c2_shift) + ((i64::from(self.c4) * dt) >> c4_shift);
+        let mut sens = (i64::from(self.c1) << c1_shift) + ((i64::from(self.c3) * dt) >> c3_shift);
         if temp < 2000 {
-            let t2 = dt * dt / (1 << 31);
+            let t2 = (dt * dt) >> 31;
             let low = (temp - 2000) * (temp - 2000);
             let (mut off2, mut sens2) = match variant {
-                Variant::Ms5611 => (5 * low / 2, 5 * low / 4),
-                Variant::Ms5607 => (61 * low / 16, 2 * low),
+                Variant::Ms5611 => ((5 * low) >> 1, (5 * low) >> 2),
+                Variant::Ms5607 => ((61 * low) >> 4, 2 * low),
             };
             if temp < -1500 {
                 let very_low = (temp + 1500) * (temp + 1500);
                 match variant {
                     Variant::Ms5611 => {
                         off2 += 7 * very_low;
-                        sens2 += 11 * very_low / 2;
+                        sens2 += (11 * very_low) >> 1;
                     }
                     Variant::Ms5607 => {
                         off2 += 15 * very_low;
@@ -287,7 +289,7 @@ impl Calibration {
             off -= off2;
             sens -= sens2;
         }
-        let p = (i64::from(d1) * sens / (1 << 21) - off) / (1 << 15);
+        let p = (((i64::from(d1) * sens) >> 21) - off) >> 15;
         Measurement {
             temperature: temp.clamp(i32::MIN.into(), i32::MAX.into()) as i32,
             pressure: p.clamp(0, u32::MAX.into()) as u32,
@@ -754,23 +756,23 @@ mod tests {
     #[test]
     fn second_order_low_and_very_low_temperature() {
         // Expected values from the datasheet algorithm evaluated with
-        // C-style (truncating) integer division.
+        // floor (arithmetic shift) division.
         let cases = [
-            (Variant::Ms5611, CAL_5611, 9_085_466, 8_000_000, -61, 95_989),
+            (Variant::Ms5611, CAL_5611, 9_085_466, 8_000_000, -62, 95_989),
             (
                 Variant::Ms5611,
                 CAL_5611,
                 9_085_466,
                 7_000_000,
-                -4_430,
-                85_696,
+                -4_431,
+                85_693,
             ),
             (
                 Variant::Ms5607,
                 CAL_5607,
                 6_465_444,
                 8_000_000,
-                1_738,
+                1_737,
                 109_370,
             ),
             (
@@ -778,8 +780,8 @@ mod tests {
                 CAL_5607,
                 6_465_444,
                 7_000_000,
-                -2_157,
-                100_348,
+                -2_158,
+                100_347,
             ),
         ];
         for (v, c, d1, d2, t, p) in cases {
