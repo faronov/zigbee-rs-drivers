@@ -122,18 +122,18 @@ ZCL column: the cluster the main quantity maps to.
 
 | Crate | Parts | Bus | ZCL | Status |
 |---|---|---|---|---|
-| ens160 | ENS160, ENS161 | I2C/SPI | TVOC, eCO2, AQI | planned |
-| ccs811 | CCS811 | I2C | TVOC, eCO2 | planned |
-| ags10 | AGS10 | I2C | TVOC | planned |
-| iaqcore | iAQ-Core C/P | I2C | TVOC, eCO2 | planned |
-| mhz19 | MH-Z19B, MH-Z19C, MH-Z19E | UART | 0x040D | planned |
-| senseair | Senseair S8, Sunrise/Sunlight (Modbus) | UART | 0x040D | planned |
-| cm1106 | Cubic CM1106, CM1106SL-NS | UART/I2C | 0x040D | planned |
-| explorir | GSS ExplorIR-M, SprintIR, CozIR | UART | 0x040D | planned |
-| pmsx003 | PMS5003, PMS7003, PMSA003, PMSA003I | UART/I2C | 0x042A | planned |
-| hm330x | HM3301, HM3302 | I2C | 0x042A | planned |
-| sds011 | SDS011, SDS021 | UART | 0x042A | planned |
-| ze08 | ZE08-CH2O, ZE07-CH2O | UART | 0x042B | planned |
+| ens160 | ENS160, ENS161 | I2C/SPI | TVOC, eCO2, AQI | mock-tested |
+| ccs811 | CCS811 | I2C | TVOC, eCO2 | mock-tested |
+| ags10 | AGS10 | I2C | TVOC | mock-tested |
+| iaqcore | iAQ-Core C/P | I2C | TVOC, eCO2 | mock-tested |
+| mhz19 | MH-Z19B, MH-Z19C, MH-Z19E | UART | 0x040D | mock-tested |
+| senseair | Senseair S8, Sunrise/Sunlight (Modbus) | UART | 0x040D | mock-tested |
+| cm1106 | Cubic CM1106, CM1106SL-NS | UART/I2C | 0x040D | mock-tested |
+| explorir | GSS ExplorIR-M, SprintIR, CozIR | UART | 0x040D | mock-tested |
+| pmsx003 | PMS5003, PMS7003, PMSA003, PMSA003I | UART/I2C | 0x042A | mock-tested |
+| hm330x | HM3301, HM3302 | I2C | 0x042A | mock-tested |
+| sds011 | SDS011, SDS021 | UART | 0x042A | mock-tested |
+| ze08 | ZE08-CH2O, ZE07-CH2O | UART | 0x042B | mock-tested |
 
 ## G. Power, energy, battery
 
