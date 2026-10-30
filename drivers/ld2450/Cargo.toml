@@ -1,0 +1,19 @@
+[package]
+name = "zigbee-ld2450"
+description = "Hi-Link HLK-LD2450 24 GHz multi-target tracking radar UART driver (blocking + async)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+zigbee-sensor.workspace = true
+embedded-io.workspace = true
+embedded-io-async.workspace = true
+
+[dev-dependencies]
+embedded-hal-mock.workspace = true
+
+[lints]
+workspace = true
