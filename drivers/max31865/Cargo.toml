@@ -1,0 +1,19 @@
+[package]
+name = "zigbee-max31865"
+description = "MAX31865 PT100/PT1000 RTD-to-digital converter driver with integer Callendar-Van Dusen conversion (blocking + async)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+zigbee-sensor.workspace = true
+embedded-hal.workspace = true
+embedded-hal-async.workspace = true
+
+[dev-dependencies]
+embedded-hal-mock.workspace = true
+
+[lints]
+workspace = true

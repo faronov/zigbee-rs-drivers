@@ -1,0 +1,15 @@
+[package]
+name = "zigbee-ds18b20"
+description = "DS18B20 / DS18S20 / DS1822 / MAX31820 1-Wire temperature sensor driver (blocking + async)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+zigbee-sensor.workspace = true
+zigbee-onewire = { path = "../onewire", version = "0.1.0" }
+
+[lints]
+workspace = true
