@@ -10,7 +10,7 @@ humidity over I2C, trigger-on-demand mode with CRC-8 on every word.
 | Sleep current | 0.36 µA typ. (trigger-on-demand), automatic after each conversion |
 | Start-up / reset | Sensor PUR 5 ms max |
 | Output | 0.01 °C, 0.01 %RH |
-| Features | low-power modes, heater on/off and power level, NVM RH/T offset programming with encoding helpers, status register, manufacturer ID check (0x3000), 48-bit NIST ID, soft reset |
+| Features | low-power modes, heater on/off and power level, NVM RH/T offset programming with encoding helpers (out of range → `InvalidArgument`), status register, manufacturer ID check (0x3000), 48-bit NIST ID, soft reset |
 | Source | TI SNAS778D (Jul 2024) |
 | Status | mock-tested |
 

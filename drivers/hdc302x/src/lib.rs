@@ -148,14 +148,31 @@ pub fn decode_measurement<E>(frame: &[u8; 6]) -> Result<Measurement, Error<E>> {
 }
 
 /// Humidity offset byte (RH± bit 7, RHOS bits 13..7 in bits 6:0) for an offset in
-/// 0.01 %RH; LSB 0.1953125 %RH, range ±24.80 %RH.
-pub fn humidity_offset_byte(offset: i32) -> u8 {
-    let magnitude = ((offset.unsigned_abs() * 512 + 5_000) / 10_000).min(127) as u8;
-    if offset > 0 {
+/// 0.01 %RH; LSB 0.1953125 %RH, range ±24.80 %RH, outside it
+/// [`Error::InvalidArgument`].
+pub fn humidity_offset_byte<E>(offset: i32) -> Result<u8, Error<E>> {
+    offset_byte(offset, 512, 10_000)
+}
+
+fn check_heater_power<E>(config: u16) -> Result<(), Error<E>> {
+    if config > HEATER_FULL {
+        Err(Error::InvalidArgument)
+    } else {
+        Ok(())
+    }
+}
+
+fn offset_byte<E>(offset: i32, scale: u64, lsb: u64) -> Result<u8, Error<E>> {
+    let magnitude = (u64::from(offset.unsigned_abs()) * scale + lsb / 2) / lsb;
+    if magnitude > 0x7F {
+        return Err(Error::InvalidArgument);
+    }
+    let magnitude = magnitude as u8;
+    Ok(if offset > 0 {
         0x80 | magnitude
     } else {
         magnitude
-    }
+    })
 }
 
 /// Offset in 0.01 %RH encoded by a humidity offset byte.
@@ -169,14 +186,10 @@ pub fn humidity_offset_centi(byte: u8) -> i32 {
 }
 
 /// Temperature offset byte (T± bit 7, TOS bits 12..6 in bits 6:0) for an offset in
-/// 0.01 °C; LSB 0.1708984375 °C, range ±21.70 °C.
-pub fn temperature_offset_byte(offset: i32) -> u8 {
-    let magnitude = ((offset.unsigned_abs() * 1_024 + 8_750) / 17_500).min(127) as u8;
-    if offset > 0 {
-        0x80 | magnitude
-    } else {
-        magnitude
-    }
+/// 0.01 °C; LSB 0.1708984375 °C, range ±21.70 °C, outside it
+/// [`Error::InvalidArgument`].
+pub fn temperature_offset_byte<E>(offset: i32) -> Result<u8, Error<E>> {
+    offset_byte(offset, 1_024, 17_500)
 }
 
 /// Offset in 0.01 °C encoded by a temperature offset byte.
@@ -307,8 +320,10 @@ impl<I2C: embedded_hal::i2c::I2c> Hdc302x<I2C> {
         })
     }
 
-    /// Select the heater resistors (e.g. [`HEATER_FULL`]).
+    /// Select the heater resistors (e.g. [`HEATER_FULL`]); a value above
+    /// [`HEATER_FULL`] (14 bits) is [`Error::InvalidArgument`].
     pub fn set_heater_power(&mut self, config: u16) -> Result<(), Error<I2C::Error>> {
+        check_heater_power(config)?;
         self.write(&with_crc(CMD_HEATER_CONFIG, config.to_be_bytes()))
     }
 
@@ -356,8 +371,8 @@ pub mod asynch {
     use super::{
         CMD_CLEAR_STATUS, CMD_HEATER_CONFIG, CMD_HEATER_DISABLE, CMD_HEATER_ENABLE, CMD_NIST_ID,
         CMD_OFFSET, CMD_READ_MANUFACTURER_ID, CMD_READ_STATUS, CMD_SOFT_RESET, DEFAULT_ADDRESS,
-        Measurement, OFFSET_PROGRAM_WAIT_US, PowerMode, RESET_WAIT_US, check_id,
-        decode_measurement, decode_word, with_crc,
+        Measurement, OFFSET_PROGRAM_WAIT_US, PowerMode, RESET_WAIT_US, check_heater_power,
+        check_id, decode_measurement, decode_word, with_crc,
     };
     use embedded_hal_async::i2c::I2c;
     use zigbee_sensor::{Error, WaitUs};
@@ -437,6 +452,7 @@ pub mod asynch {
 
         /// See [`super::Hdc302x::set_heater_power`].
         pub async fn set_heater_power(&mut self, config: u16) -> Result<(), Error<I2C::Error>> {
+            check_heater_power(config)?;
             self.write(&with_crc(CMD_HEATER_CONFIG, config.to_be_bytes()))
                 .await
         }
@@ -525,16 +541,25 @@ mod tests {
     #[test]
     fn offset_encoding_matches_datasheet_tables() {
         // Table 7-11 / 7-13: 0xAA = +8.203125 %RH, 0x2A = −7.177734375 °C.
-        assert_eq!(humidity_offset_byte(820), 0xAA);
+        assert_eq!(humidity_offset_byte::<()>(820), Ok(0xAA));
         assert_eq!(humidity_offset_centi(0xAA), 820);
         assert_eq!(humidity_offset_centi(0x2A), -820);
         assert_eq!(humidity_offset_centi(0xFF), 2_480);
-        assert_eq!(temperature_offset_byte(-717), 0x2A);
+        assert_eq!(temperature_offset_byte::<()>(-717), Ok(0x2A));
         assert_eq!(temperature_offset_centi(0x2A), -718);
         assert_eq!(temperature_offset_centi(0x81), 17);
         assert_eq!(temperature_offset_centi(0xFF), 2_170);
-        assert_eq!(temperature_offset_byte(10_000), 0xFF);
-        assert_eq!(humidity_offset_byte(0), 0x00);
+        assert_eq!(temperature_offset_byte::<()>(2_170), Ok(0xFF));
+        assert_eq!(
+            temperature_offset_byte::<()>(10_000),
+            Err(Error::InvalidArgument)
+        );
+        assert_eq!(humidity_offset_byte::<()>(-2_480), Ok(0x7F));
+        assert_eq!(
+            humidity_offset_byte::<()>(-2_500),
+            Err(Error::InvalidArgument)
+        );
+        assert_eq!(humidity_offset_byte::<()>(0), Ok(0x00));
     }
 
     #[test]
@@ -557,10 +582,14 @@ mod tests {
         assert_eq!(hdc.start_measurement().unwrap(), 5_700);
         assert!(matches!(hdc.read_measurement(), Err(Error::Bus(_))));
         assert_eq!(hdc.read_measurement().unwrap().temperature, 2_500);
+        assert_eq!(hdc.set_heater_power(0x4000), Err(Error::InvalidArgument));
         hdc.set_heater_power(HEATER_FULL).unwrap();
         hdc.set_heater(true).unwrap();
         assert_eq!(
-            hdc.program_offsets(humidity_offset_byte(820), temperature_offset_byte(-717)),
+            hdc.program_offsets(
+                humidity_offset_byte::<()>(820).unwrap(),
+                temperature_offset_byte::<()>(-717).unwrap()
+            ),
             Ok(OFFSET_PROGRAM_WAIT_US)
         );
         assert_eq!(hdc.offsets(), Ok((0xAA, 0x2A)));

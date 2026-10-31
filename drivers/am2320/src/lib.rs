@@ -9,7 +9,7 @@
 //!    ignored); returns [`WAKE_WAIT_US`].
 //! 2. First [`read_measurement`](zigbee_sensor::blocking::Sensor::read_measurement):
 //!    sends "read registers 0x00..0x03" (function 0x03) and returns
-//!    [`Error::NotReady`]; wait [`Am2320::pending_wait_us`] (≥ 1.5 ms).
+//!    [`Error::Pending`] with [`READ_WAIT_US`] (≥ 1.5 ms).
 //! 3. Second `read_measurement`: reads the 8-byte answer and checks the
 //!    CRC-16 (Modbus, low byte first).
 //!
@@ -25,12 +25,15 @@
 //! Reference: Aosong "AM2320 Digital Temperature and Humidity Sensor"
 //! product manual (§8.2).
 //!
+//! [`zigbee_sensor::blocking::measure`] and
+//! [`zigbee_sensor::asynch::Sensor::measure`] follow the phases.
+//!
 //! ```ignore
 //! let mut am = Am2320::new(i2c);
 //! let wake_us = am.start_measurement()?;
 //! // ... sleep wake_us ...
-//! assert_eq!(am.read_measurement(), Err(Error::NotReady));
-//! // ... sleep am.pending_wait_us() ...
+//! assert_eq!(am.read_measurement(), Err(Error::Pending(READ_WAIT_US)));
+//! // ... sleep READ_WAIT_US ...
 //! let m = am.read_measurement()?;
 //! ```
 
@@ -148,12 +151,6 @@ macro_rules! constructors {
         pub fn release(self) -> I2C {
             self.i2c
         }
-
-        /// Wait before the next `read_measurement` after it returned
-        /// [`Error::NotReady`](zigbee_sensor::Error::NotReady).
-        pub const fn pending_wait_us(&self) -> WaitUs {
-            READ_WAIT_US
-        }
     };
 }
 
@@ -175,23 +172,6 @@ impl<I2C: embedded_hal::i2c::I2c> Am2320<I2C> {
 
     fn command(&mut self, command: &[u8; 3]) -> Result<(), Error<I2C::Error>> {
         self.i2c.write(ADDRESS, command).map_err(Error::bus)
-    }
-
-    /// Wake, command, wait and read in one call (convenience for bring-up;
-    /// blocks ~3 ms).
-    pub fn measure<D: embedded_hal::delay::DelayNs>(
-        &mut self,
-        delay: &mut D,
-    ) -> Result<Measurement, Error<I2C::Error>> {
-        use zigbee_sensor::blocking::Sensor as _;
-        delay.delay_us(self.start_measurement()?);
-        match self.read_measurement() {
-            Err(Error::NotReady) => {
-                delay.delay_us(READ_WAIT_US);
-                self.read_measurement()
-            }
-            other => other,
-        }
     }
 
     /// Read model, version and device ID (blocks ~3 ms on `delay`).
@@ -222,13 +202,14 @@ impl<I2C: embedded_hal::i2c::I2c> zigbee_sensor::blocking::Sensor for Am2320<I2C
     }
 
     /// First call after waking sends the read command and returns
-    /// [`Error::NotReady`]; the next call reads the answer.
+    /// [`Error::Pending`] with [`READ_WAIT_US`]; the next call reads the
+    /// answer.
     fn read_measurement(&mut self) -> Result<Measurement, Error<I2C::Error>> {
         if self.phase == Phase::Awake {
             self.phase = Phase::Idle;
             self.command(&CMD_READ_MEASUREMENT)?;
             self.phase = Phase::Commanded;
-            return Err(Error::NotReady);
+            return Err(Error::Pending(READ_WAIT_US));
         }
         self.phase = Phase::Idle;
         let mut frame = [0u8; 8];
@@ -265,23 +246,6 @@ pub mod asynch {
             self.i2c.write(ADDRESS, command).await.map_err(Error::bus)
         }
 
-        /// See [`super::Am2320::measure`].
-        pub async fn measure_all<D: embedded_hal_async::delay::DelayNs>(
-            &mut self,
-            delay: &mut D,
-        ) -> Result<Measurement, Error<I2C::Error>> {
-            use zigbee_sensor::asynch::Sensor as _;
-            let wait = self.start_measurement().await?;
-            delay.delay_us(wait).await;
-            match self.read_measurement().await {
-                Err(Error::NotReady) => {
-                    delay.delay_us(READ_WAIT_US).await;
-                    self.read_measurement().await
-                }
-                other => other,
-            }
-        }
-
         /// See [`super::Am2320::device_info`].
         pub async fn device_info<D: embedded_hal_async::delay::DelayNs>(
             &mut self,
@@ -316,7 +280,7 @@ pub mod asynch {
                 self.phase = Phase::Idle;
                 self.command(&CMD_READ_MEASUREMENT).await?;
                 self.phase = Phase::Commanded;
-                return Err(Error::NotReady);
+                return Err(Error::Pending(READ_WAIT_US));
             }
             self.phase = Phase::Idle;
             let mut frame = [0u8; 8];
@@ -382,8 +346,7 @@ mod tests {
         let mut i2c = Mock::new(&expectations);
         let mut am = Am2320::new(&mut i2c);
         assert_eq!(am.start_measurement(), Ok(WAKE_WAIT_US));
-        assert_eq!(am.read_measurement(), Err(Error::NotReady));
-        assert_eq!(am.pending_wait_us(), 2_000);
+        assert_eq!(am.read_measurement(), Err(Error::Pending(READ_WAIT_US)));
         assert_eq!(am.read_measurement(), Ok(EXPECTED));
         i2c.done();
     }
@@ -423,6 +386,8 @@ mod tests {
 
     #[test]
     fn async_measure() {
+        use zigbee_sensor::asynch::Sensor as _;
+
         struct RecordingDelay(u32);
         impl embedded_hal_async::delay::DelayNs for RecordingDelay {
             async fn delay_ns(&mut self, ns: u32) {
@@ -438,7 +403,7 @@ mod tests {
         let mut i2c = Mock::new(&expectations);
         let mut am = asynch::Am2320::new(&mut i2c);
         let mut delay = RecordingDelay(0);
-        assert_eq!(block_on(am.measure_all(&mut delay)), Ok(EXPECTED));
+        assert_eq!(block_on(am.measure(&mut delay)), Ok(EXPECTED));
         assert_eq!(delay.0, WAKE_WAIT_US + READ_WAIT_US);
         i2c.done();
     }
