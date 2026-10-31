@@ -192,16 +192,17 @@ ZCL column: the cluster the main quantity maps to.
 | mc3419 | MC3419, MC3479 | I2C/SPI | vibration, tilt | mock-tested |
 | kxtj3 | KXTJ3-1057 | I2C | vibration, tilt | mock-tested |
 | da217 | DA217, DA218 | I2C | vibration, tilt | mock-tested |
-| lsm6dso | LSM6DS3, LSM6DSL, LSM6DSO, LSM6DSOX | I2C/SPI | vibration, tilt | planned |
-| mpu6050 | MPU-6050, MPU-6500, MPU-9250 (accel/gyro) | I2C | vibration, tilt | planned |
-| icm426xx | ICM-42605, ICM-42688-P, ICM-42670-P | I2C/SPI | vibration, tilt | planned |
-| bmi160 | BMI160 | I2C/SPI | vibration, tilt | planned |
-| bmi270 | BMI270 | I2C/SPI | vibration, tilt | planned |
-| qmi8658 | QMI8658A, QMI8658C | I2C/SPI | vibration, tilt | planned |
-| lis3mdl | LIS3MDL | I2C/SPI | contact | planned |
-| lis2mdl | LIS2MDL, IIS2MDC | I2C/SPI | contact | planned |
-| mmc56x3 | MMC5603, MMC5633 | I2C | contact | planned |
-| hmc5883l | HMC5883L | I2C | contact | planned |
-| qmc5883l | QMC5883L, QMC5883P | I2C | contact | planned |
-| ak09918 | AK09916, AK09918 | I2C | contact | planned |
-| bmm150 | BMM150, BMM350 | I2C/SPI | contact | planned |
+| lsm6dso | LSM6DS3, LSM6DSL, LSM6DSO, LSM6DSOX | I2C/SPI | vibration, tilt | mock-tested |
+| mpu6050 | MPU-6050, MPU-6500, MPU-9250 (accel/gyro) | I2C | vibration, tilt | mock-tested |
+| icm426xx | ICM-42605, ICM-42688-P, ICM-42670-P | I2C/SPI | vibration, tilt | mock-tested |
+| bmi160 | BMI160 | I2C/SPI | vibration, tilt | mock-tested |
+| bmi270 | BMI270 | I2C/SPI | vibration, tilt | mock-tested |
+| qmi8658 | QMI8658A, QMI8658C | I2C/SPI | vibration, tilt | mock-tested |
+| lis3mdl | LIS3MDL | I2C/SPI | contact | mock-tested |
+| lis2mdl | LIS2MDL, IIS2MDC | I2C/SPI | contact | mock-tested |
+| mmc56x3 | MMC5603, MMC5633 | I2C | contact | mock-tested |
+| hmc5883l | HMC5883L | I2C | contact | mock-tested |
+| qmc5883l | QMC5883L, QMC5883P | I2C | contact | mock-tested |
+| ak09918 | AK09916, AK09918 | I2C | contact | mock-tested |
+| bmm150 | BMM150 | I2C/SPI | contact | mock-tested |
+| bmm350 | BMM350 | I2C | contact | mock-tested |

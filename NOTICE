@@ -10,3 +10,26 @@ drivers/sgp4x/src/gas_index.rs
   Licensed under the BSD 3-Clause License; the full license text is
   reproduced in the header of that file. Its fix16 arithmetic follows
   libfixmath (https://github.com/PetteriAimonen/libfixmath, MIT License).
+
+drivers/bmi270/src/config_file.rs
+  BMI270 feature-engine configuration file, copied verbatim from the Bosch
+  Sensortec BMI270 SensorAPI v2.86.1
+  (https://github.com/boschsensortec/BMI270_SensorAPI).
+  Copyright (c) 2023 Bosch Sensortec GmbH. All rights reserved.
+  Licensed under the BSD 3-Clause License; the full license text is
+  reproduced in the header of that file. Included only with the
+  `config-blob` feature (enabled by default).
+
+drivers/bmm150/src/compensation.rs
+  Compensation formulas ported from the Bosch Sensortec BMM150 SensorAPI
+  v2.0.0 (https://github.com/boschsensortec/BMM150_SensorAPI).
+  Copyright (c) 2020 Bosch Sensortec GmbH. All rights reserved.
+  Licensed under the BSD 3-Clause License; the full license text is
+  reproduced in the header of that file.
+
+drivers/bmm350/src/compensation.rs
+  Fixed-point compensation ported from the Bosch Sensortec BMM350
+  SensorAPI v1.10.0 (https://github.com/boschsensortec/BMM350_SensorAPI).
+  Copyright (c) 2025 Bosch Sensortec GmbH. All rights reserved.
+  Licensed under the BSD 3-Clause License; the full license text is
+  reproduced in the header of that file.
