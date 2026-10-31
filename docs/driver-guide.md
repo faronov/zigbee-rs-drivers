@@ -57,6 +57,11 @@ device. So:
   checksums, `Error::InvalidArgument` for caller arguments outside the
   part's range. `NotReady` carries no wait hint: the caller retries after
   its own back-off (the expected wait is what `start_measurement` returned).
+* Multi-phase parts (BMP180 temperature then pressure, AM2320 wake then
+  read, ...): when `read_measurement` finishes one phase and starts the next,
+  return `Error::Pending(wait_us)`. The `measure` helpers follow up to
+  `MAX_PHASES` such phases. Do not add per-driver `pending_wait_us()`
+  workarounds.
 * A reset or wake that uses the I2C general call (address 0x00) reaches
   every device on the bus. Name it `general_call_reset()` or similar and
   say so in its doc comment and the crate README.

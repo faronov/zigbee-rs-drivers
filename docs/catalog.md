@@ -28,43 +28,43 @@ ZCL column: the cluster the main quantity maps to.
 
 | Crate | Parts | Bus | ZCL | Status |
 |---|---|---|---|---|
-| bme280 | BME280, BMP280 | I2C/SPI | 0x0403, 0x0402, 0x0405 | planned |
-| bme680 | BME680, BME688 (raw gas resistance) | I2C/SPI | 0x0403, 0x0402, 0x0405 | planned |
-| bmp180 | BMP180, BMP085 | I2C | 0x0403 | planned |
-| bmp3xx | BMP388, BMP390 | I2C/SPI | 0x0403 | planned |
-| bmp5xx | BMP580, BMP581, BMP585 | I2C/SPI | 0x0403 | planned |
-| dps310 | DPS310, DPS368 | I2C/SPI | 0x0403 | planned |
-| spl06 | SPL06-001, SPL07-003 | I2C/SPI | 0x0403 | planned |
-| ms5611 | MS5611, MS5607 | I2C/SPI | 0x0403 | planned |
-| ms5637 | MS5637, MS5837 | I2C | 0x0403 | planned |
-| lps22hb | LPS22HB | I2C/SPI | 0x0403 | planned |
-| lps22hh | LPS22HH | I2C/SPI | 0x0403 | planned |
-| lps2xdf | LPS22DF, LPS28DFW | I2C/SPI | 0x0403 | planned |
-| lps25hb | LPS25HB | I2C/SPI | 0x0403 | planned |
-| icp101xx | ICP-10100, ICP-10101, ICP-10110, ICP-10111 | I2C | 0x0403 | planned |
-| hp206c | HP206C, HP203B | I2C | 0x0403 | planned |
-| omron2smpb | 2SMPB-02E | I2C | 0x0403 | planned |
-| xgzp68xxd | XGZP6847D, XGZP6897D | I2C | 0x0403 | planned |
+| bme280 | BME280, BMP280 | I2C/SPI | 0x0403, 0x0402, 0x0405 | mock-tested |
+| bme680 | BME680, BME688 (raw gas resistance) | I2C/SPI | 0x0403, 0x0402, 0x0405 | mock-tested |
+| bmp180 | BMP180, BMP085 | I2C | 0x0403 | mock-tested |
+| bmp3xx | BMP388, BMP390 | I2C/SPI | 0x0403 | mock-tested |
+| bmp5xx | BMP580, BMP581, BMP585 | I2C/SPI | 0x0403 | mock-tested |
+| dps310 | DPS310, DPS368 | I2C/SPI | 0x0403 | mock-tested |
+| spl06 | SPL06-001, SPL07-003 | I2C/SPI | 0x0403 | mock-tested |
+| ms5611 | MS5611, MS5607 | I2C/SPI | 0x0403 | mock-tested |
+| ms5637 | MS5637, MS5837 | I2C | 0x0403 | mock-tested |
+| lps22hb | LPS22HB | I2C/SPI | 0x0403 | mock-tested |
+| lps22hh | LPS22HH | I2C/SPI | 0x0403 | mock-tested |
+| lps2xdf | LPS22DF, LPS28DFW | I2C/SPI | 0x0403 | mock-tested |
+| lps25hb | LPS25HB | I2C/SPI | 0x0403 | mock-tested |
+| icp101xx | ICP-10100, ICP-10101, ICP-10110, ICP-10111 | I2C | 0x0403 | mock-tested |
+| hp206c | HP206C, HP203B | I2C | 0x0403 | mock-tested |
+| omron2smpb | 2SMPB-02E | I2C | 0x0403 | mock-tested |
+| xgzp68xxd | XGZP6847D, XGZP6897D | I2C | 0x0403 | mock-tested |
 
 ## C. Temperature + humidity (other vendors)
 
 | Crate | Parts | Bus | ZCL | Status |
 |---|---|---|---|---|
-| si70xx | Si7006, Si7013, Si7020, Si7021, HTU21D, SHT20/21/25 | I2C | 0x0402, 0x0405 | planned |
-| si705x | Si7050, Si7051, Si7053, Si7054, Si7055 | I2C | 0x0402 | planned |
-| hdc1080 | HDC1010, HDC1080 | I2C | 0x0402, 0x0405 | planned |
-| hdc2080 | HDC2010, HDC2021, HDC2022, HDC2080 | I2C | 0x0402, 0x0405 | planned |
-| hdc302x | HDC3020, HDC3021, HDC3022 | I2C | 0x0402, 0x0405 | planned |
-| aht | AHT10, AHT20, AHT21, AHT25, AHT30 | I2C | 0x0402, 0x0405 | planned |
-| dht | DHT11, DHT22/AM2302 | GPIO | 0x0402, 0x0405 | planned |
-| am2320 | AM2320, AM2315C | I2C | 0x0402, 0x0405 | planned |
-| hs300x | HS3001, HS3002, HS3003, HS3004 | I2C | 0x0402, 0x0405 | planned |
-| hs400x | HS4001, HS4002, HS4003, HS4004 | I2C | 0x0402, 0x0405 | planned |
-| htu31d | HTU31D | I2C | 0x0402, 0x0405 | planned |
-| hts221 | HTS221 | I2C/SPI | 0x0402, 0x0405 | planned |
-| ens210 | ENS210 | I2C | 0x0402, 0x0405 | planned |
-| cht8305 | CHT8305 | I2C | 0x0402, 0x0405 | planned |
-| cht831x | CHT8310, CHT8315 | I2C | 0x0402, 0x0405 | planned |
+| si70xx | Si7006, Si7013, Si7020, Si7021, HTU21D, SHT20/21/25 | I2C | 0x0402, 0x0405 | mock-tested |
+| si705x | Si7050, Si7051, Si7053, Si7054, Si7055 | I2C | 0x0402 | mock-tested |
+| hdc1080 | HDC1010, HDC1080 | I2C | 0x0402, 0x0405 | mock-tested |
+| hdc2080 | HDC2010, HDC2021, HDC2022, HDC2080 | I2C | 0x0402, 0x0405 | mock-tested |
+| hdc302x | HDC3020, HDC3021, HDC3022 | I2C | 0x0402, 0x0405 | mock-tested |
+| aht | AHT10, AHT20, AHT21, AHT25, AHT30 | I2C | 0x0402, 0x0405 | mock-tested |
+| dht | DHT11, DHT22/AM2302 | GPIO | 0x0402, 0x0405 | mock-tested |
+| am2320 | AM2320, AM2315C | I2C | 0x0402, 0x0405 | mock-tested |
+| hs300x | HS3001, HS3002, HS3003, HS3004 | I2C | 0x0402, 0x0405 | mock-tested |
+| hs400x | HS4001, HS4002, HS4003, HS4004 | I2C | 0x0402, 0x0405 | mock-tested |
+| htu31d | HTU31D | I2C | 0x0402, 0x0405 | mock-tested |
+| hts221 | HTS221 | I2C/SPI | 0x0402, 0x0405 | mock-tested |
+| ens210 | ENS210 | I2C | 0x0402, 0x0405 | mock-tested |
+| cht8305 | CHT8305 | I2C | 0x0402, 0x0405 | mock-tested |
+| cht831x | CHT8310, CHT8315 | I2C | 0x0402, 0x0405 | mock-tested |
 
 ## D. Temperature
 

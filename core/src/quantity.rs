@@ -28,6 +28,8 @@ pub enum Quantity {
     Humidity(u16),
     /// Absolute pressure in Pa (ZCL 0x0403).
     Pressure(u32),
+    /// Gauge or differential pressure in Pa; may be negative.
+    GaugePressure(i32),
     /// Illuminance in milli-lux (ZCL 0x0400).
     Illuminance(u32),
     /// UV index in 0.01 units.
