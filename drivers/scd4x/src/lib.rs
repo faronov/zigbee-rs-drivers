@@ -404,11 +404,11 @@ macro_rules! methods {
 
         /// Set the ambient pressure in Pa (70 000–120 000, default 101 300;
         /// overrides the altitude). Allowed during periodic measurement.
-        /// Out-of-range values give [`Error::InvalidData`] without bus
+        /// Out-of-range values give [`Error::InvalidArgument`] without bus
         /// traffic.
         pub $($async)* fn set_ambient_pressure(&mut self, pascal: u32) -> Result<WaitUs, Error<I2C::Error>> {
             if !(70_000..=120_000).contains(&pascal) {
-                return Err(Error::InvalidData);
+                return Err(Error::InvalidArgument);
             }
             let word = ((pascal + 50) / 100) as u16;
             self.send(cmd::AMBIENT_PRESSURE, &[word], COMMAND_WAIT_US) $($aw)*
@@ -478,13 +478,13 @@ macro_rules! methods {
 
         /// Set the ASC initial period in hours (multiple of 4, default 44;
         /// single shot counts one sample as 5 min). Other values give
-        /// [`Error::InvalidData`].
+        /// [`Error::InvalidArgument`].
         pub $($async)* fn set_automatic_self_calibration_initial_period(
             &mut self,
             hours: u16,
         ) -> Result<WaitUs, Error<I2C::Error>> {
             if hours % 4 != 0 {
-                return Err(Error::InvalidData);
+                return Err(Error::InvalidArgument);
             }
             self.send(cmd::SET_ASC_INITIAL_PERIOD, &[hours], COMMAND_WAIT_US) $($aw)*
         }
@@ -498,13 +498,13 @@ macro_rules! methods {
         }
 
         /// Set the ASC standard period in hours (multiple of 4, default
-        /// 156). Other values give [`Error::InvalidData`].
+        /// 156). Other values give [`Error::InvalidArgument`].
         pub $($async)* fn set_automatic_self_calibration_standard_period(
             &mut self,
             hours: u16,
         ) -> Result<WaitUs, Error<I2C::Error>> {
             if hours % 4 != 0 {
-                return Err(Error::InvalidData);
+                return Err(Error::InvalidArgument);
             }
             self.send(cmd::SET_ASC_STANDARD_PERIOD, &[hours], COMMAND_WAIT_US) $($aw)*
         }
@@ -842,10 +842,13 @@ mod tests {
         let mut i2c = Mock::new(&[]);
         let mut scd = Scd4x::new(&mut i2c).with_mode(Mode::SingleShot);
         assert_eq!(scd.start_measurement(), Err(Error::Unsupported));
-        assert_eq!(scd.set_ambient_pressure(60_000), Err(Error::InvalidData));
+        assert_eq!(
+            scd.set_ambient_pressure(60_000),
+            Err(Error::InvalidArgument)
+        );
         assert_eq!(
             scd.set_automatic_self_calibration_initial_period(45),
-            Err(Error::InvalidData)
+            Err(Error::InvalidArgument)
         );
         i2c.done();
     }
