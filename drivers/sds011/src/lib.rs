@@ -457,7 +457,7 @@ where
     /// Set the (persistent) working period, 0–30 minutes.
     pub fn set_working_period(&mut self, minutes: u8) -> Result<WaitUs, Error<U::Error>> {
         let packet =
-            set_working_period_command(minutes, self.device_id).ok_or(Error::Unsupported)?;
+            set_working_period_command(minutes, self.device_id).ok_or(Error::InvalidArgument)?;
         self.send_command(&packet)
     }
 
@@ -628,8 +628,8 @@ pub mod asynch {
 
         /// See [`super::Sds011::set_working_period`].
         pub async fn set_working_period(&mut self, minutes: u8) -> Result<WaitUs, Error<U::Error>> {
-            let packet =
-                set_working_period_command(minutes, self.device_id).ok_or(Error::Unsupported)?;
+            let packet = set_working_period_command(minutes, self.device_id)
+                .ok_or(Error::InvalidArgument)?;
             self.send_command(&packet).await
         }
 
@@ -898,7 +898,7 @@ mod tests {
         assert_eq!(sds.read_measurement().unwrap().pm2_5, 1236);
         sds.sleep().unwrap();
         assert_eq!(sds.wake().unwrap(), STABILIZE_US);
-        assert_eq!(sds.set_working_period(31), Err(Error::Unsupported));
+        assert_eq!(sds.set_working_period(31), Err(Error::InvalidArgument));
         sds.uart.on_write = hex("AA C5 07 0F 07 0A A1 60 28 AB");
         sds.request_firmware_version().unwrap();
         assert_eq!(sds.read_firmware_version().unwrap().year, 15);

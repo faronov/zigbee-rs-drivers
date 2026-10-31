@@ -11,7 +11,7 @@ PM1.0/PM2.5/PM10, particle counts and checksum verification.
 | ID | sensor number in bytes 2–3 (no fixed ID) |
 | Timing | refresh every 1 s; stable 30 s after power-on / wake |
 | Current | < 75 mA average, < 120 mA peak; < 150 µA sleeping (SET low); 5 V ± 3 % |
-| Output | `Pm1`, `Pm25`, `Pm10` (atmospheric) in 0.1 µg/m³; range 1–500 µg/m³ effective |
+| Output | `Pm1`, `Pm25`, `Pm10` (atmospheric) in 0.1 µg/m³, range 1–500 µg/m³ effective; `ParticlesAbove` 0.3–10 µm in 0.01 #/cm³ |
 | Source | HM-3300/3600 Dust Sensor Data Sheet V2.1, Appendix 2 |
 | Status | mock-tested |
 
@@ -27,8 +27,9 @@ call `reset_selection()` so the select command is sent again.
 
 - Sleep is only possible via the SET pin (low = sleep, fan off); there is no
   I2C command, so `LowPower` is not implemented.
-- Particle counts are per **litre** (PMS sensors use 0.1 L) and are exposed
-  on `Measurement` only.
+- Particle counts are per **litre** (PMS sensors use 0.1 L) on
+  `Measurement::counts_per_litre`; they are reported as `ParticlesAbove`
+  in 0.01 #/cm³ (per 0.1 L), i.e. divided by 10 and truncated.
 - Do not use UART and I2C at the same time. The UART protocol (`42 4D …`,
   PMS-style) is not implemented here.
 

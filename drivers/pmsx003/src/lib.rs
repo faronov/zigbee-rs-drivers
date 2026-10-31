@@ -146,6 +146,21 @@ impl Readings for Measurement {
         f(Quantity::Pm1(u32::from(a.pm1_0) * 10));
         f(Quantity::Pm25(u32::from(a.pm2_5) * 10));
         f(Quantity::Pm10(u32::from(a.pm10) * 10));
+        let c = self.counts;
+        // Counts per 0.1 L equal the core's 0.01 #/cm³ unit.
+        for (size_nm, count) in [
+            (300, c.um0_3),
+            (500, c.um0_5),
+            (1000, c.um1_0),
+            (2500, c.um2_5),
+            (5000, c.um5_0),
+            (10000, c.um10),
+        ] {
+            f(Quantity::ParticlesAbove {
+                size_nm,
+                count: u32::from(count),
+            });
+        }
     }
 }
 
@@ -732,8 +747,37 @@ mod tests {
         let mut seen = Vec::new();
         m.for_each(&mut |q| seen.push(q));
         assert_eq!(
-            seen,
-            vec![Quantity::Pm1(40), Quantity::Pm25(90), Quantity::Pm10(110)]
+            seen[..3],
+            [Quantity::Pm1(40), Quantity::Pm25(90), Quantity::Pm10(110)]
+        );
+        assert_eq!(
+            seen[3..],
+            [
+                Quantity::ParticlesAbove {
+                    size_nm: 300,
+                    count: 1200
+                },
+                Quantity::ParticlesAbove {
+                    size_nm: 500,
+                    count: 350
+                },
+                Quantity::ParticlesAbove {
+                    size_nm: 1000,
+                    count: 60
+                },
+                Quantity::ParticlesAbove {
+                    size_nm: 2500,
+                    count: 8
+                },
+                Quantity::ParticlesAbove {
+                    size_nm: 5000,
+                    count: 2
+                },
+                Quantity::ParticlesAbove {
+                    size_nm: 10000,
+                    count: 1
+                },
+            ]
         );
         let mut bad = f;
         bad[31] ^= 1;

@@ -3,7 +3,8 @@
 ScioSense ENS160 / ENS161 digital metal-oxide multi-gas sensor: TVOC,
 equivalent CO2 and the UBA air-quality index, computed on-chip. The ENS161
 adds LOW POWER (1 sample/min) and ULTRA LOW POWER (1 sample/5 min) modes
-and the AQI-S index (0..=500, `Measurement::aqi_s`).
+and the AQI-S index (0..=500, `Measurement::aqi_s`, reported as
+`RelativeAirQualityIndex`).
 
 | | |
 |---|---|
@@ -12,7 +13,7 @@ and the AQI-S index (0..=500, `Measurement::aqi_s`).
 | Sampling | STANDARD 1 s; ENS161 LP 60 s, ULP 300 s (free-running, `NEWDAT` flag) |
 | Warm-up | 3 min after power-on; first hour of life is "initial start-up" (`Validity`) |
 | Current | deep sleep 10 µA, idle 2 mA, STANDARD 29 mA typ. (1.8 V VDD, 1.8/3.3 V VDDIO) |
-| Output | TVOC ppb, eCO2 ppm, AQI-UBA 1..=5 |
+| Output | TVOC ppb, eCO2 ppm, AQI-UBA 1..=5; ENS161 AQI-S 0..=500 |
 | Source | ScioSense ENS160 Datasheet v1.3 (SC-001224-DS-9, 2023-03-29); ENS161 operating-modes app note SC-002489-AN-1 v1.0 |
 | Status | mock-tested |
 

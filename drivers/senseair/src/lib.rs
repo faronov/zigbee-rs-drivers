@@ -511,11 +511,66 @@ impl SunriseState {
     }
 }
 
+/// Why a [`Device`] encoder refused to build a request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RequestError {
+    /// The model does not implement the request.
+    Unsupported,
+    /// An argument is out of the range the model accepts.
+    InvalidArgument,
+}
+
+impl<E> From<RequestError> for Error<E> {
+    fn from(e: RequestError) -> Self {
+        match e {
+            RequestError::Unsupported => Error::Unsupported,
+            RequestError::InvalidArgument => Error::InvalidArgument,
+        }
+    }
+}
+
+/// A request, or the reason it could not be encoded; accepted by
+/// [`Senseair::send`].
+pub trait IntoRequest {
+    /// Convert into a request.
+    fn into_request(self) -> Result<Request, RequestError>;
+}
+
+impl IntoRequest for Request {
+    fn into_request(self) -> Result<Request, RequestError> {
+        Ok(self)
+    }
+}
+
+impl IntoRequest for Result<Request, RequestError> {
+    fn into_request(self) -> Result<Request, RequestError> {
+        self
+    }
+}
+
+/// `None` from the free encoders ([`read_input_registers`], …) means an
+/// out-of-range register count.
+impl IntoRequest for Option<Request> {
+    fn into_request(self) -> Result<Request, RequestError> {
+        self.ok_or(RequestError::InvalidArgument)
+    }
+}
+
+const PRESSURE_RANGE: core::ops::RangeInclusive<u16> = 3000..=13000;
+
+fn in_range(range: core::ops::RangeInclusive<u16>, v: u16) -> Result<(), RequestError> {
+    if range.contains(&v) {
+        Ok(())
+    } else {
+        Err(RequestError::InvalidArgument)
+    }
+}
+
 /// Model + address: encodes every supported request.
 ///
-/// Methods return `None` (mapped to [`Error::Unsupported`] by
-/// [`Senseair::send`]) for out-of-range arguments or requests the model does
-/// not implement.
+/// Methods return [`RequestError::Unsupported`] for requests the model
+/// does not implement and [`RequestError::InvalidArgument`] for
+/// out-of-range arguments ([`Senseair::send`] maps both to [`Error`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Device {
     /// Sensor family.
@@ -541,24 +596,42 @@ impl Device {
         }
     }
 
-    fn sunrise_only(&self) -> Option<()> {
-        (self.model == Model::Sunrise).then_some(())
+    fn sunrise_only(&self) -> Result<(), RequestError> {
+        if self.model == Model::Sunrise {
+            Ok(())
+        } else {
+            Err(RequestError::Unsupported)
+        }
+    }
+
+    fn read_count(&self, count: u16) -> Result<(), RequestError> {
+        if (1..=self.model.max_read_registers()).contains(&count) {
+            Ok(())
+        } else {
+            Err(RequestError::InvalidArgument)
+        }
     }
 
     /// Read `count` input registers from `start`.
-    pub fn read_input(&self, start: u16, count: u16) -> Option<Request> {
-        if count > self.model.max_read_registers() {
-            return None;
-        }
-        read_input_registers(self.address, start, count)
+    pub fn read_input(&self, start: u16, count: u16) -> Result<Request, RequestError> {
+        self.read_count(count)?;
+        Ok(read_unchecked(
+            self.address,
+            function::READ_INPUT,
+            start,
+            count,
+        ))
     }
 
     /// Read `count` holding registers from `start`.
-    pub fn read_holding(&self, start: u16, count: u16) -> Option<Request> {
-        if count > self.model.max_read_registers() {
-            return None;
-        }
-        read_holding_registers(self.address, start, count)
+    pub fn read_holding(&self, start: u16, count: u16) -> Result<Request, RequestError> {
+        self.read_count(count)?;
+        Ok(read_unchecked(
+            self.address,
+            function::READ_HOLDING,
+            start,
+            count,
+        ))
     }
 
     /// Write one holding register (function 06 on the S8, 0x10 on the
@@ -578,9 +651,9 @@ impl Device {
     }
 
     /// Write consecutive holding registers (Sunrise only).
-    pub fn write_many(&self, start: u16, values: &[u16]) -> Option<Request> {
+    pub fn write_many(&self, start: u16, values: &[u16]) -> Result<Request, RequestError> {
         self.sunrise_only()?;
-        write_multiple_registers(self.address, start, values)
+        write_multiple_registers(self.address, start, values).ok_or(RequestError::InvalidArgument)
     }
 
     /// IR1–IR4: status and CO2 (decode with [`Measurement::decode`]).
@@ -628,112 +701,121 @@ impl Device {
     /// Trigger a calibration (HR2). S8: background and zero only; read HR1
     /// after [`S8_CALIBRATION_US`]. Sunrise: performed on the next
     /// measurement.
-    pub fn calibrate(&self, c: Calibration) -> Option<Request> {
+    pub fn calibrate(&self, c: Calibration) -> Result<Request, RequestError> {
         if self.model == Model::S8 && !matches!(c, Calibration::Background | Calibration::Zero) {
-            return None;
+            return Err(RequestError::Unsupported);
         }
-        Some(self.write(1, c.command()))
+        Ok(self.write(1, c.command()))
     }
 
     /// Sunrise: set the target-calibration concentration (HR3, ppm).
-    pub fn set_calibration_target(&self, ppm: u16) -> Option<Request> {
+    pub fn set_calibration_target(&self, ppm: u16) -> Result<Request, RequestError> {
         self.sunrise_only()?;
-        Some(self.write(sunrise::CALIBRATION_TARGET, ppm))
+        Ok(self.write(sunrise::CALIBRATION_TARGET, ppm))
     }
 
     /// Sunrise: continuous (`false`) or single (`true`) measurement mode
     /// (EEPROM; reset afterwards with [`Device::reset`]).
-    pub fn set_measurement_mode(&self, single: bool) -> Option<Request> {
+    pub fn set_measurement_mode(&self, single: bool) -> Result<Request, RequestError> {
         self.sunrise_only()?;
-        Some(self.write(sunrise::MEASUREMENT_MODE, u16::from(single)))
+        Ok(self.write(sunrise::MEASUREMENT_MODE, u16::from(single)))
     }
 
     /// Sunrise: continuous-mode measurement period, 2–65534 s (EEPROM;
     /// needs a reset).
-    pub fn set_measurement_period(&self, seconds: u16) -> Option<Request> {
+    pub fn set_measurement_period(&self, seconds: u16) -> Result<Request, RequestError> {
         self.sunrise_only()?;
-        (2..=65534)
-            .contains(&seconds)
-            .then(|| self.write(sunrise::MEASUREMENT_PERIOD, seconds))
+        in_range(2..=65534, seconds)?;
+        Ok(self.write(sunrise::MEASUREMENT_PERIOD, seconds))
     }
 
     /// Sunrise: samples per measurement, 1–1024, ≤ 300 ms each (EEPROM;
     /// needs a reset).
-    pub fn set_number_of_samples(&self, samples: u16) -> Option<Request> {
+    pub fn set_number_of_samples(&self, samples: u16) -> Result<Request, RequestError> {
         self.sunrise_only()?;
-        (1..=1024)
-            .contains(&samples)
-            .then(|| self.write(sunrise::NUMBER_OF_SAMPLES, samples))
+        in_range(1..=1024, samples)?;
+        Ok(self.write(sunrise::NUMBER_OF_SAMPLES, samples))
     }
 
     /// Sunrise: read the meter control bits (HR19).
-    pub fn read_meter_control(&self) -> Option<Request> {
+    pub fn read_meter_control(&self) -> Result<Request, RequestError> {
         self.sunrise_only()?;
-        read_holding_registers(self.address, sunrise::METER_CONTROL, 1)
+        Ok(read_unchecked(
+            self.address,
+            function::READ_HOLDING,
+            sunrise::METER_CONTROL,
+            1,
+        ))
     }
 
     /// Sunrise: write the meter control bits (HR19, EEPROM); read-modify-
     /// write with [`Device::read_meter_control`].
-    pub fn set_meter_control(&self, bits: u16) -> Option<Request> {
+    pub fn set_meter_control(&self, bits: u16) -> Result<Request, RequestError> {
         self.sunrise_only()?;
-        Some(self.write(sunrise::METER_CONTROL, bits))
+        Ok(self.write(sunrise::METER_CONTROL, bits))
     }
 
     /// Sunrise: barometric pressure for compensation, 3000–13000 (0.1 hPa).
-    pub fn set_pressure(&self, deci_hpa: u16) -> Option<Request> {
+    pub fn set_pressure(&self, deci_hpa: u16) -> Result<Request, RequestError> {
         self.sunrise_only()?;
-        (3000..=13000)
-            .contains(&deci_hpa)
-            .then(|| self.write(sunrise::PRESSURE, deci_hpa))
+        in_range(PRESSURE_RANGE, deci_hpa)?;
+        Ok(self.write(sunrise::PRESSURE, deci_hpa))
     }
 
     /// Sunrise: clear the error status register.
-    pub fn clear_errors(&self) -> Option<Request> {
+    pub fn clear_errors(&self) -> Result<Request, RequestError> {
         self.sunrise_only()?;
-        Some(self.write(sunrise::CLEAR_ERROR_STATUS, 0))
+        Ok(self.write(sunrise::CLEAR_ERROR_STATUS, 0))
     }
 
     /// Sunrise: restart the sensor (SCR = 0xFF).
-    pub fn reset(&self) -> Option<Request> {
+    pub fn reset(&self) -> Result<Request, RequestError> {
         self.sunrise_only()?;
-        Some(self.write(sunrise::SCR, sunrise::SCR_RESET))
+        Ok(self.write(sunrise::SCR, sunrise::SCR_RESET))
     }
 
     /// Sunrise single-measurement mode: start a measurement, restoring the
     /// saved `state` (HR35–HR46) and optionally the pressure (HR47) in the
     /// same write. Without saved state only the start command is written;
     /// `pressure` then has to be written first with
-    /// [`Device::set_pressure`] (`None` is returned).
+    /// [`Device::set_pressure`] (otherwise `InvalidArgument`).
     pub fn start_single(
         &self,
         state: Option<&SunriseState>,
         pressure_deci_hpa: Option<u16>,
-    ) -> Option<Request> {
+    ) -> Result<Request, RequestError> {
         self.sunrise_only()?;
         let Some(state) = state else {
-            return pressure_deci_hpa
-                .is_none()
-                .then(|| self.write(sunrise::START_SINGLE_MIRROR, 1));
+            return match pressure_deci_hpa {
+                None => Ok(self.write(sunrise::START_SINGLE_MIRROR, 1)),
+                Some(_) => Err(RequestError::InvalidArgument),
+            };
         };
         let mut values = [0u16; 2 + sunrise::STATE_LEN];
         values[0] = 1;
         values[1..=sunrise::STATE_LEN].copy_from_slice(&state.0);
         let n = match pressure_deci_hpa {
             None => 1 + sunrise::STATE_LEN,
-            Some(p) if (3000..=13000).contains(&p) => {
+            Some(p) => {
+                in_range(PRESSURE_RANGE, p)?;
                 values[1 + sunrise::STATE_LEN] = p;
                 2 + sunrise::STATE_LEN
             }
-            Some(_) => return None,
         };
         write_multiple_registers(self.address, sunrise::START_SINGLE_MIRROR, &values[..n])
+            .ok_or(RequestError::InvalidArgument)
     }
 
     /// Sunrise: read the state registers HR35–HR46 (decode with
     /// [`SunriseState::decode`]).
-    pub fn read_state(&self) -> Option<Request> {
+    pub fn read_state(&self) -> Result<Request, RequestError> {
         self.sunrise_only()?;
-        read_holding_registers(self.address, sunrise::STATE, sunrise::STATE_LEN as u16)
+        Ok(read_unchecked(
+            self.address,
+            function::READ_HOLDING,
+            sunrise::STATE,
+            sunrise::STATE_LEN as u16,
+        ))
     }
 }
 
@@ -1095,10 +1177,10 @@ where
     }
 
     /// Discard pending input and send `request` (from a [`Device`]
-    /// encoder; `None` → [`Error::Unsupported`]). Returns the time to wait
-    /// before reading the reply.
-    pub fn send(&mut self, request: impl Into<Option<Request>>) -> Result<WaitUs, Error<U::Error>> {
-        let request = request.into().ok_or(Error::Unsupported)?;
+    /// encoder; a [`RequestError`] is returned as the matching [`Error`]).
+    /// Returns the time to wait before reading the reply.
+    pub fn send(&mut self, request: impl IntoRequest) -> Result<WaitUs, Error<U::Error>> {
+        let request = request.into_request()?;
         self.drain()?;
         self.parser = Parser::for_request(&request);
         self.uart
@@ -1178,8 +1260,8 @@ where
 /// Async twin over `embedded_io_async`.
 pub mod asynch {
     use super::{
-        Device, Frame, Info, MAX_DRAIN_BYTES, MAX_READ_BYTES, Measurement, Parser, RESPONSE_US,
-        Registers, Request, SunriseState, ack_of, finish, function, info_of, measurement_of,
+        Device, Frame, Info, IntoRequest, MAX_DRAIN_BYTES, MAX_READ_BYTES, Measurement, Parser,
+        RESPONSE_US, Registers, SunriseState, ack_of, finish, function, info_of, measurement_of,
         registers_of, state_of,
     };
     use embedded_io_async::{Read, ReadReady, Write};
@@ -1211,11 +1293,8 @@ pub mod asynch {
         }
 
         /// See [`super::Senseair::send`].
-        pub async fn send(
-            &mut self,
-            request: impl Into<Option<Request>>,
-        ) -> Result<WaitUs, Error<U::Error>> {
-            let request = request.into().ok_or(Error::Unsupported)?;
+        pub async fn send(&mut self, request: impl IntoRequest) -> Result<WaitUs, Error<U::Error>> {
+            let request = request.into_request()?;
             self.drain().await?;
             self.parser = Parser::for_request(&request);
             self.uart
@@ -1373,8 +1452,8 @@ mod tests {
         0x68, 0x04, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x47, 0xB7, 0xF2,
     ];
 
-    fn bytes(r: Option<Request>) -> Vec<u8> {
-        r.unwrap().as_bytes().to_vec()
+    fn bytes(r: impl IntoRequest) -> Vec<u8> {
+        r.into_request().unwrap().as_bytes().to_vec()
     }
 
     fn frames(address: u8, function: u8, data: &[u8]) -> Vec<Frame> {
@@ -1397,17 +1476,17 @@ mod tests {
     #[test]
     fn s8_requests_match_datasheet() {
         let d = Device::s8();
-        let cases: [(Option<Request>, &[u8]); 8] = [
+        let cases: [(Result<Request, RequestError>, &[u8]); 8] = [
             (
                 d.read_input(s8::CO2, 1),
                 &[0xFE, 0x04, 0x00, 0x03, 0x00, 0x01, 0xD5, 0xC5],
             ),
             (
-                Some(d.read_measurement()),
+                Ok(d.read_measurement()),
                 &[0xFE, 0x04, 0x00, 0x00, 0x00, 0x04, 0xE5, 0xC6],
             ),
             (
-                Some(d.clear_calibration_status()),
+                Ok(d.clear_calibration_status()),
                 &[0xFE, 0x06, 0x00, 0x00, 0x00, 0x00, 0x9D, 0xC5],
             ),
             (
@@ -1415,19 +1494,19 @@ mod tests {
                 &[0xFE, 0x06, 0x00, 0x01, 0x7C, 0x06, 0x6C, 0xC7],
             ),
             (
-                Some(d.read_calibration_status()),
+                Ok(d.read_calibration_status()),
                 &[0xFE, 0x03, 0x00, 0x00, 0x00, 0x01, 0x90, 0x05],
             ),
             (
-                Some(d.read_abc_period()),
+                Ok(d.read_abc_period()),
                 &[0xFE, 0x03, 0x00, 0x1F, 0x00, 0x01, 0xA1, 0xC3],
             ),
             (
-                Some(d.set_abc_period(0)),
+                Ok(d.set_abc_period(0)),
                 &[0xFE, 0x06, 0x00, 0x1F, 0x00, 0x00, 0xAC, 0x03],
             ),
             (
-                Some(d.set_abc_period(180)),
+                Ok(d.set_abc_period(180)),
                 &[0xFE, 0x06, 0x00, 0x1F, 0x00, 0xB4, 0xAC, 0x74],
             ),
         ];
@@ -1435,11 +1514,14 @@ mod tests {
             assert_eq!(bytes(req), want);
         }
         // Sunrise-only requests and over-long reads are rejected.
-        assert!(d.calibrate(Calibration::Target).is_none());
-        assert!(d.start_single(None, None).is_none());
-        assert!(d.write_many(0, &[1]).is_none());
-        assert!(d.read_input(0, 18).is_none());
-        assert!(d.read_input(0, 17).is_some());
+        assert_eq!(
+            d.calibrate(Calibration::Target),
+            Err(RequestError::Unsupported)
+        );
+        assert_eq!(d.start_single(None, None), Err(RequestError::Unsupported));
+        assert_eq!(d.write_many(0, &[1]), Err(RequestError::Unsupported));
+        assert_eq!(d.read_input(0, 18), Err(RequestError::InvalidArgument));
+        assert!(d.read_input(0, 17).is_ok());
     }
 
     #[test]
@@ -1455,9 +1537,9 @@ mod tests {
             0x00, 0x7F, 0xFF, 0x00, 0x08, 0x00, 0x02, 0x00, 0x01, 0x00, 0x01, 0x97, 0xDC, 0x00,
             0xF5, 0xFF, 0x64, 0x00, 0xF5, 0x29, 0x04, 0xDF, 0xB4,
         ];
-        let cases: [(Option<Request>, &[u8]); 13] = [
+        let cases: [(Result<Request, RequestError>, &[u8]); 13] = [
             (
-                Some(d.read_measurement()),
+                Ok(d.read_measurement()),
                 &[0x68, 0x04, 0x00, 0x00, 0x00, 0x04, 0xF8, 0xF0],
             ),
             (
@@ -1489,11 +1571,11 @@ mod tests {
                 ],
             ),
             (
-                Some(d.read_abc_period()),
+                Ok(d.read_abc_period()),
                 &[0x68, 0x03, 0x00, 0x0D, 0x00, 0x01, 0x1C, 0xF0],
             ),
             (
-                Some(d.set_abc_period(200)),
+                Ok(d.set_abc_period(200)),
                 &[
                     0x68, 0x10, 0x00, 0x0D, 0x00, 0x01, 0x02, 0x00, 0xC8, 0x64, 0x89,
                 ],
@@ -1511,19 +1593,32 @@ mod tests {
                 ],
             ),
             (
-                Some(d.read_calibration_status()),
+                Ok(d.read_calibration_status()),
                 &[0x68, 0x03, 0x00, 0x00, 0x00, 0x01, 0x8D, 0x33],
             ),
         ];
         for (req, want) in cases {
             assert_eq!(bytes(req), want);
         }
-        assert!(d.start_single(None, Some(10500)).is_none());
-        assert!(d.start_single(Some(&STATE), Some(2999)).is_none());
-        assert!(d.set_pressure(13001).is_none());
-        assert!(d.set_measurement_period(1).is_none());
-        assert!(d.set_number_of_samples(1025).is_none());
-        assert!(d.read_input(0, 33).is_none());
+        assert_eq!(
+            d.start_single(None, Some(10500)),
+            Err(RequestError::InvalidArgument)
+        );
+        assert_eq!(
+            d.start_single(Some(&STATE), Some(2999)),
+            Err(RequestError::InvalidArgument)
+        );
+        assert_eq!(d.set_pressure(13001), Err(RequestError::InvalidArgument));
+        assert_eq!(
+            d.set_measurement_period(1),
+            Err(RequestError::InvalidArgument)
+        );
+        assert_eq!(
+            d.set_number_of_samples(1025),
+            Err(RequestError::InvalidArgument)
+        );
+        assert_eq!(d.read_input(0, 33), Err(RequestError::InvalidArgument));
+        assert_eq!(d.read_holding(0, 0), Err(RequestError::InvalidArgument));
         assert!(write_multiple_registers(0x68, 0, &[0; 17]).is_none());
     }
 
@@ -1651,6 +1746,10 @@ mod tests {
         assert_eq!(
             co2.send(co2.device().calibrate(Calibration::Factory)),
             Err(Error::Unsupported)
+        );
+        assert_eq!(
+            co2.send(co2.device().read_holding(0x20, 0)),
+            Err(Error::InvalidArgument)
         );
 
         let mut tx = Vec::new();

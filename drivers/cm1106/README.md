@@ -23,7 +23,7 @@ UART (all variants): the sensor only answers requests.
 returns `NotReady`. Other commands: `send_command(&…_command())`, then
 `read_reply(cmd::…)` and the `Frame` decoders (`abc`, `period`,
 `working_mode`, `serial_number`, `version`, `is_ack`). `set_abc` and
-`calibrate` (400–1500 ppm) validate their arguments (`Unsupported`).
+`calibrate` (400–1500 ppm) validate their arguments (`InvalidArgument`).
 
 CM1106-C I2C: `start_measurement` writes command `0x01` and returns
 `I2C_RESPONSE_US` (20 ms, assumed); `read_measurement` reads
