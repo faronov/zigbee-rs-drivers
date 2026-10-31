@@ -1,4 +1,4 @@
-# Sensor catalogue
+# Sensor and display catalogue
 
 Target list of drivers, grouped by family. One crate can cover several
 compatible parts. Status: `planned`, `mock-tested`, `hw: <board>`.
@@ -206,3 +206,21 @@ ZCL column: the cluster the main quantity maps to.
 | ak09918 | AK09916, AK09918 | I2C | contact | mock-tested |
 | bmm150 | BMM150 | I2C/SPI | contact | mock-tested |
 | bmm350 | BMM350 | I2C | contact | mock-tested |
+
+## J. Displays
+
+Display drivers depend on the shared [`zigbee-display`](../drivers/display)
+crate (traits, SPI/I2C interface, embedded-graphics frame buffers), not on
+`zigbee-sensor` alone, so sensor-only builds do not pull in
+embedded-graphics. ZCL column: none (displays are output only). RAM is the
+caller-provided frame buffer.
+
+| Crate | Parts | Bus | ZCL | Status |
+|---|---|---|---|---|
+| display | shared core: `Display` trait, `SpiInterface`/`I2cInterface`, `MonoFrame`/`TriFrame`/`PageFrame`/`Rgb565Frame` | SPI/I2C | — | mock-tested |
+| sharp-memlcd | Sharp LS013B7DH03 128x128 (SiLabs WSTK BRD4001A), LS013B7DH05 144x168, LS011B7DH03 160x68, LS027B7DH01 400x240 (RAM 2 048 / 3 024 / 1 360 / 12 000 B) | SPI (CS active high) | — | mock-tested, not run on hardware |
+| ssd1306 | SSD1306 128x64 / 128x32, SH1106 128x64 (RAM 1 024 / 512 B) | I2C/SPI | — | mock-tested, not run on hardware |
+| ssd1680 | SSD1680 2.13" 122x250 and 2.9" 128x296, SSD1681 1.54" 200x200, SSD1675 2.13"; B/W and B/W/R (RAM 4 000–5 000 B, ×2 tricolour) | SPI + BUSY | — | mock-tested, not run on hardware |
+| uc8151 | UC8151 2.9" 128x296 / 2.13" 104x212 B/W, IL0373 2.9"/2.13" B/W/R (RAM 4 736 / 2 756 B, ×2 tricolour) | SPI + BUSY_N | — | mock-tested, not run on hardware |
+| il3820 | IL3820 2.9" 128x296, IL3895 2.13" 122x250, IL3829 1.54" 200x200 B/W (RAM 4 736 / 4 000 / 5 000 B) | SPI + BUSY | — | mock-tested, not run on hardware |
+| st7789 | ST7789 240x240 / 240x320 / 135x240 / 170x320, ST7735 128x160 / 128x128 / 80x160, RGB565 — mains-powered only | SPI | — | mock-tested, not run on hardware |

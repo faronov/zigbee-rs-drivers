@@ -13,10 +13,12 @@ repository = "https://github.com/faronov/zigbee-rs-drivers"
 zigbee-sensor = { path = "core" }
 zigbee-onewire = { path = "drivers/onewire" }
 zigbee-sensirion-common = { path = "drivers/sensirion-common" }
+zigbee-display = { path = "drivers/display" }
 embedded-hal = "1.0"
 embedded-hal-async = "1.0"
 embedded-io = "0.6"
 embedded-io-async = "0.6"
+embedded-graphics-core = "0.4"
 embedded-hal-mock = { version = "0.11", default-features = false, features = ["eh1", "embedded-hal-async"] }
 
 [workspace.lints.rust]

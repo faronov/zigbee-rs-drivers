@@ -1,0 +1,20 @@
+[package]
+name = "zigbee-ssd1306"
+description = "SSD1306 / SH1106 OLED driver over I2C or SPI (blocking + async)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+zigbee-display.workspace = true
+embedded-hal.workspace = true
+embedded-hal-async.workspace = true
+embedded-graphics-core.workspace = true
+
+[dev-dependencies]
+embedded-hal-mock.workspace = true
+
+[lints]
+workspace = true

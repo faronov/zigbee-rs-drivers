@@ -47,3 +47,25 @@ drivers/vl53l0x/src/
   STMicroelectronics and STMicroelectronics International N.V. Licensed
   under the BSD 3-Clause License; the full license texts are reproduced in
   the headers of those files.
+
+drivers/ssd1680/src/lib.rs (LUT_SSD1675_2IN13_FULL, LUT_SSD1675_2IN13_PARTIAL,
+SSD1675 voltage settings) and drivers/il3820/src/lib.rs (LUT_FULL,
+LUT_PARTIAL, booster/VCOM/dummy-line/gate-width values)
+  E-paper waveform tables and register values taken from the epd-waveshare
+  crate v0.6.0 (https://github.com/rust-embedded-community/epd-waveshare),
+  modules epd2in13_v2 and type_a, which in turn reproduce Waveshare's
+  published values.
+  Copyright (c) 2018, Christoph Groß, morituri2@mailbox.org
+  Licensed under the ISC License:
+
+    Permission to use, copy, modify, and/or distribute this software for any
+    purpose with or without fee is hereby granted, provided that the above
+    copyright notice and this permission notice appear in all copies.
+
+    THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+    WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+    MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+    ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+    WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+    ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+    OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.

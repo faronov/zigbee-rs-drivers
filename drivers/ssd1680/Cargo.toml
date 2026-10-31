@@ -1,0 +1,20 @@
+[package]
+name = "zigbee-ssd1680"
+description = "SSD1680 / SSD1681 / SSD1675 e-paper driver with non-blocking refresh (blocking + async)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+zigbee-display.workspace = true
+embedded-hal.workspace = true
+embedded-hal-async.workspace = true
+embedded-graphics-core.workspace = true
+
+[dev-dependencies]
+embedded-hal-mock.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,20 @@
+[package]
+name = "zigbee-uc8151"
+description = "UC8151 / IL0373 e-paper driver with non-blocking refresh (blocking + async)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+zigbee-display.workspace = true
+embedded-hal.workspace = true
+embedded-hal-async.workspace = true
+embedded-graphics-core.workspace = true
+
+[dev-dependencies]
+embedded-hal-mock.workspace = true
+
+[lints]
+workspace = true

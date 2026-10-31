@@ -113,3 +113,28 @@ The repository is MIT OR Apache-2.0 and the drivers are our own code:
 Each crate has a `README.md`: supported parts, bus and addresses,
 conversion times, sleep current, wiring notes, and the validation status
 (`mock-tested` until it has been run on hardware; then the board/platform).
+
+## Display drivers
+
+Displays use the shared `zigbee-display` crate (`drivers/display`) instead
+of the sensor traits; it is the only extra dependency they may add
+(together with `embedded-graphics-core`, which it re-exports).
+
+* Implement `zigbee_display::blocking::Display` and
+  `zigbee_display::asynch::Display`: `init`, `start_refresh() -> WaitUs`,
+  `is_busy`, `sleep`. Like `start_measurement`, a refresh only *starts*
+  the update and returns a wait hint. Every later call samples BUSY and
+  returns `Error::NotReady` instead of spinning. Multi-step power-down
+  returns `Error::Pending(us)`; the `sleep` helpers follow it. Only
+  `init` may block, for reset pulses and short BUSY waits (bounded,
+  `Error::Timeout`).
+* The async twin adds `wait_idle()` on pins that implement
+  `embedded_hal_async::digital::Wait`.
+* Talk to the bus through `zigbee_display::Interface` / `AsyncInterface`
+  (`SpiInterface` = SpiDevice + DC, `I2cInterface` = control-byte
+  framing), so one driver covers both buses where the part allows it.
+* Frame buffers are caller-provided (`MonoFrame`, `TriFrame`, `PageFrame`,
+  `Rgb565Frame` over `&mut [u8]` or an array). They implement
+  embedded-graphics `DrawTarget` and track a dirty rectangle; drivers use
+  it for partial updates. State the RAM per resolution in the README.
+* Colour TFTs write windows and do not need a full frame buffer.

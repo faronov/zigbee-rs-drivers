@@ -1,0 +1,20 @@
+[package]
+name = "zigbee-st7789"
+description = "ST7789 / ST7735 RGB565 TFT driver with windowed writes (blocking + async)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+zigbee-display.workspace = true
+embedded-hal.workspace = true
+embedded-hal-async.workspace = true
+embedded-graphics-core.workspace = true
+
+[dev-dependencies]
+embedded-hal-mock.workspace = true
+
+[lints]
+workspace = true

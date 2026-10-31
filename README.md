@@ -19,10 +19,33 @@ let zcl_temp = zigbee_sensor::zcl::temperature(m.temperature);
 
 or, in an async executor, `sht.measure(&mut delay).await`.
 
+## Displays
+
+Display drivers follow the same rule: nothing blocks the stack while an
+e-paper panel refreshes for seconds.
+
+```rust,ignore
+let mut buf = [0u8; zigbee_display::mono_len(122, 250)];   // 4 000 B, yours
+let mut fb = MonoFrame::new(&mut buf[..], 122, 250).unwrap();
+Text::new("21.5 °C", Point::new(4, 20), style).draw(&mut fb)?; // embedded-graphics
+let wait_us = epd.update(&fb)?;           // write RAM + start refresh
+// ... schedule a timer for wait_us; later `epd.is_busy()?`, then `epd.sleep()?`
+```
+
+Frame buffers are caller-provided slices (or arrays), so RAM use is
+explicit. `drivers/display` (`zigbee-display`) holds the shared traits,
+the SPI+DC / I2C interface and the embedded-graphics frame buffers. Only
+display crates depend on it: sensor-only firmware does not pull in
+embedded-graphics. Supported: Sharp Memory LCD (incl. the SiLabs WSTK
+LS013B7DH03), SSD1306/SH1106 OLED, SSD1680/SSD1681/SSD1675, UC8151/IL0373
+and IL3820/IL3895 e-paper (full and partial refresh), and ST7789/ST7735
+TFT (mains-powered devices only). All are **mock-tested, not run on
+hardware** yet.
+
 * [`core`](core): `zigbee-sensor` — traits, units (`Quantity`), ZCL
   conversions, CRC helpers, ADC trait.
 * [`drivers`](drivers): one crate per part family.
-* [Sensor catalogue](docs/catalog.md) — supported and planned parts.
+* [Catalogue](docs/catalog.md) — supported and planned sensors and displays.
 * [Driver guide](docs/driver-guide.md) — rules for writing a driver.
 
 ## License
