@@ -139,44 +139,44 @@ ZCL column: the cluster the main quantity maps to.
 
 | Crate | Parts | Bus | ZCL | Status |
 |---|---|---|---|---|
-| ina219 | INA219 | I2C | 0x0B04 | planned |
-| ina226 | INA226, INA230, INA231 | I2C | 0x0B04 | planned |
-| ina260 | INA260 | I2C | 0x0B04 | planned |
-| ina228 | INA228, INA229 | I2C/SPI | 0x0B04, 0x0702 | planned |
-| ina3221 | INA3221 | I2C | 0x0B04 | planned |
-| pac194x | PAC1941, PAC1942, PAC1943, PAC1944 | I2C | 0x0B04 | planned |
-| max17048 | MAX17043, MAX17044, MAX17048, MAX17049 | I2C | 0x0001 | planned |
-| max17055 | MAX17055 | I2C | 0x0001 | planned |
-| max1726x | MAX17260, MAX17261, MAX17262, MAX17263 | I2C | 0x0001 | planned |
-| bq27441 | BQ27441, BQ27421, BQ27426 | I2C | 0x0001 | planned |
-| lc709203f | LC709203F | I2C | 0x0001 | planned |
-| bl0942 | BL0942 | UART/SPI | 0x0B04, 0x0702 | planned |
-| bl0937 | BL0937, HLW8012 (pulse output) | GPIO pulse | 0x0B04, 0x0702 | planned |
-| hlw8032 | HLW8032, CSE7759 | UART | 0x0B04, 0x0702 | planned |
-| cse7766 | CSE7766 | UART | 0x0B04, 0x0702 | planned |
-| pzem004t | PZEM-004T v3, PZEM-016, PZEM-017 (Modbus) | UART | 0x0B04, 0x0702 | planned |
-| ade7953 | ADE7953 | I2C/SPI | 0x0B04, 0x0702 | planned |
-| battery | Divider + discharge curves (CR2032, 2xAA, Li-ion, LiFePO4) | ADC | 0x0001 | planned |
+| ina219 | INA219 | I2C | 0x0B04 | mock-tested |
+| ina226 | INA226, INA230, INA231 | I2C | 0x0B04 | mock-tested |
+| ina260 | INA260 | I2C | 0x0B04 | mock-tested |
+| ina228 | INA228, INA229 | I2C/SPI | 0x0B04, 0x0702 | mock-tested |
+| ina3221 | INA3221 | I2C | 0x0B04 | mock-tested |
+| pac194x | PAC1941, PAC1942, PAC1943, PAC1944 | I2C | 0x0B04 | mock-tested |
+| max17048 | MAX17043, MAX17044, MAX17048, MAX17049 | I2C | 0x0001 | mock-tested |
+| max17055 | MAX17055 | I2C | 0x0001 | mock-tested |
+| max1726x | MAX17260, MAX17261, MAX17262, MAX17263 | I2C | 0x0001 | mock-tested |
+| bq27441 | BQ27441, BQ27421, BQ27426 | I2C | 0x0001 | mock-tested |
+| lc709203f | LC709203F | I2C | 0x0001 | mock-tested |
+| bl0942 | BL0942 | UART/SPI | 0x0B04, 0x0702 | mock-tested |
+| bl0937 | BL0937, HLW8012 (pulse output) | GPIO pulse | 0x0B04, 0x0702 | mock-tested |
+| hlw8032 | HLW8032, CSE7759 | UART | 0x0B04, 0x0702 | mock-tested |
+| cse7766 | CSE7766 | UART | 0x0B04, 0x0702 | mock-tested |
+| pzem004t | PZEM-004T v3, PZEM-016, PZEM-017 (Modbus) | UART | 0x0B04, 0x0702 | mock-tested |
+| ade7953 | ADE7953 | I2C/SPI | 0x0B04, 0x0702 | mock-tested |
+| battery | Divider + discharge curves (CR2032, 2xAA, Li-ion, LiFePO4) | ADC | 0x0001 | mock-tested |
 
 ## H. Presence, distance, contact, weight
 
 | Crate | Parts | Bus | ZCL | Status |
 |---|---|---|---|---|
-| ld2410 | HLK-LD2410, LD2410B, LD2410C (24 GHz radar) | UART | 0x0406 | planned |
-| ld2450 | HLK-LD2450 (multi-target radar) | UART | 0x0406 | planned |
-| s3km1110 | Iclegend S3KM1110 (24 GHz radar) | UART | 0x0406 | planned |
-| xbr818 | Phosense XBR818 (10 GHz radar) | I2C | 0x0406 | planned |
-| vl53l0x | VL53L0X (ToF) | I2C | distance | planned |
-| vl53l1x | VL53L1X, VL53L4CD (ToF) | I2C | distance | planned |
-| hcsr04 | HC-SR04, RCWL-1601 (ultrasonic) | GPIO | distance | planned |
-| a01nyub | DFRobot A01NYUB, A02YYUW (ultrasonic) | UART | distance | planned |
-| si7210 | Si7210 (hall) | I2C | contact | planned |
-| tmag5273 | TMAG5273 (3D hall) | I2C | contact | planned |
-| als31300 | ALS31300 (3D hall) | I2C | contact | planned |
-| digital | PIR, reed, water-leak, hall switch, vibration switch (debounced GPIO) | GPIO | 0x0406, IAS zone | planned |
-| hx711 | HX711 (load cell) | GPIO | mass | planned |
-| fdc1004 | FDC1004 (capacitance) | I2C | 0x0408 | planned |
-| soil | Capacitive soil probe via ADC (calibrated) | ADC | 0x0408 | planned |
+| ld2410 | HLK-LD2410, LD2410B, LD2410C (24 GHz radar) | UART | 0x0406 | mock-tested |
+| ld2450 | HLK-LD2450 (multi-target radar) | UART | 0x0406 | mock-tested |
+| s3km1110 | Iclegend S3KM1110 (24 GHz radar) | UART | 0x0406 | mock-tested |
+| xbr818 | Phosense XBR818 (10 GHz radar) | I2C | 0x0406 | mock-tested |
+| vl53l0x | VL53L0X (ToF) | I2C | distance | mock-tested |
+| vl53l1x | VL53L1X, VL53L4CD (ToF) | I2C | distance | mock-tested |
+| hcsr04 | HC-SR04, RCWL-1601 (ultrasonic) | GPIO | distance | mock-tested |
+| a01nyub | DFRobot A01NYUB, A02YYUW (ultrasonic) | UART | distance | mock-tested |
+| si7210 | Si7210 (hall) | I2C | contact | mock-tested |
+| tmag5273 | TMAG5273 (3D hall) | I2C | contact | mock-tested |
+| als31300 | ALS31300 (3D hall) | I2C | contact | mock-tested |
+| digital | PIR, reed, water-leak, hall switch, vibration switch (debounced GPIO) | GPIO | 0x0406, IAS zone | mock-tested |
+| hx711 | HX711 (load cell) | GPIO | mass | mock-tested |
+| fdc1004 | FDC1004 (capacitance) | I2C | 0x0408 | mock-tested |
+| soil | Capacitive soil probe via ADC (calibrated) | ADC | 0x0408 | mock-tested |
 
 ## I. Motion: accelerometers, IMUs, magnetometers
 

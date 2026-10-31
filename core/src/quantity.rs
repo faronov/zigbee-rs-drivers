@@ -94,10 +94,23 @@ pub enum Quantity {
     Frequency(u32),
     /// Battery state of charge in 0.5 % units, 0..=200 (ZCL 0x0001 0x0021).
     BatteryPercent(u8),
+    /// Remaining battery charge in µAh (fuel gauges).
+    Charge(u32),
+    /// Full battery capacity in µAh (fuel gauges).
+    Capacity(u32),
+    /// Estimated time until the battery is empty, in s.
+    TimeToEmpty(u32),
+    /// Estimated time until the battery is full, in s.
+    TimeToFull(u32),
     /// Distance in mm.
     Distance(u32),
     /// Presence/occupancy detected (ZCL 0x0406).
     Occupancy(bool),
+    /// Contact state: `true` = closed (reed, door/window; ZCL IAS Zone
+    /// alarm 1 is the inverse, "open").
+    Contact(bool),
+    /// Generic binary alarm: water leak, vibration, tamper (ZCL IAS Zone).
+    Alarm(bool),
     /// Mass in mg.
     Mass(i32),
     /// Soil moisture / water content in 0.01 % (ZCL 0x0408).
@@ -112,6 +125,10 @@ pub enum Quantity {
     MagneticFlux(i32),
     /// Unscaled proximity/reflectance counts.
     Proximity(u32),
+    /// Capacitance in fF (capacitance-to-digital converters).
+    Capacitance(i32),
+    /// Angle in 0.01° (0..36000 for absolute angles).
+    Angle(i32),
 }
 
 /// A decoded measurement that can enumerate its quantities.

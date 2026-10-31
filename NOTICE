@@ -33,3 +33,17 @@ drivers/bmm350/src/compensation.rs
   Copyright (c) 2025 Bosch Sensortec GmbH. All rights reserved.
   Licensed under the BSD 3-Clause License; the full license text is
   reproduced in the header of that file.
+
+drivers/vl53l1x/src/lib.rs
+  Default configuration and timing calculations ported from the
+  STMicroelectronics VL53L1X Ultra Lite Driver (COPYRIGHT(c) 2018
+  STMicroelectronics) and VL53L4CD Ultra Lite Driver (COPYRIGHT(c) 2021
+  STMicroelectronics). Licensed under the BSD 3-Clause License; the full
+  license text is reproduced in the header of that file.
+
+drivers/vl53l0x/src/
+  Initialisation sequence and tuning table ported from the
+  STMicroelectronics VL53L0X API (stm32duino port), COPYRIGHT(c) 2016
+  STMicroelectronics and STMicroelectronics International N.V. Licensed
+  under the BSD 3-Clause License; the full license texts are reproduced in
+  the headers of those files.
