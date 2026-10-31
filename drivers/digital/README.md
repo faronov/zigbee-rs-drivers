@@ -10,7 +10,7 @@ digital hall switches and vibration/tilt switches.
 | Core | pure state machine fed with `(level, timestamp_ms)`; no internal timers |
 | Debounce | configurable per input (presets: contact 20 ms, hall 10 ms, leak 500 ms, PIR 50 ms glitch filter) |
 | Hold | occupancy/vibration stays active for `hold_ms` after the input goes inactive |
-| Output | `Quantity::Occupancy` for PIR; typed `Reading { kind, active }` for contact / leak / hall / vibration |
+| Output | `Quantity::Occupancy` (PIR), `Quantity::Contact` (reed, hall switch; `true` = closed / magnet present), `Quantity::Alarm` (water leak, vibration); typed `Reading { kind, active }` |
 | Status | mock-tested |
 
 Wiring notes:

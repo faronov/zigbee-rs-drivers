@@ -500,10 +500,10 @@ macro_rules! api {
         }
 
         /// Write a command frame without waiting for the ACK;
-        /// `InvalidData` for an out-of-range gate.
+        /// `InvalidArgument` for an out-of-range gate.
         pub $($asyncness)? fn send(&mut self, cmd: &Command) -> Result<(), Error<U::Error>> {
             let mut frame = [0u8; MAX_COMMAND_LEN];
-            let n = cmd.encode(&mut frame).ok_or(Error::InvalidData)?;
+            let n = cmd.encode(&mut frame).ok_or(Error::InvalidArgument)?;
             self.uart.write_all(&frame[..n]) $($aw)* .map_err(Error::bus)?;
             self.uart.flush() $($aw)* .map_err(Error::bus)
         }
@@ -837,7 +837,7 @@ mod tests {
         );
         assert_eq!(
             s.read_param(Param::HoldThreshold(15)),
-            Err(Error::InvalidData)
+            Err(Error::InvalidArgument)
         );
     }
 

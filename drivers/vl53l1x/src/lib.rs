@@ -498,13 +498,13 @@ macro_rules! api {
         }
 
         /// VL53L1X distance mode; re-applies the timing budget.
-        /// `Unsupported` on the VL53L4CD, `InvalidData` if the current
+        /// `Unsupported` on the VL53L4CD, `InvalidArgument` if the current
         /// budget (15 ms) does not exist in long mode.
         pub $($asyncness)? fn set_distance_mode(&mut self, mode: DistanceMode) -> Result<(), Error<I2C::Error>> {
             if self.variant != Variant::Vl53l1x {
                 return Err(Error::Unsupported);
             }
-            let (a, b) = vl53l1x_timeouts(mode, self.budget_ms).ok_or(Error::InvalidData)?;
+            let (a, b) = vl53l1x_timeouts(mode, self.budget_ms).ok_or(Error::InvalidArgument)?;
             let (phasecal, vcsel_a, vcsel_b, phase_high, woi, initial) = match mode {
                 DistanceMode::Short => (0x14, 0x07, 0x05, 0x38, 0x0705, 0x0606),
                 DistanceMode::Long => (0x0A, 0x0F, 0x0D, 0xB8, 0x0F0D, 0x0E0E),
@@ -526,18 +526,18 @@ macro_rules! api {
         /// continuous mode); otherwise it must exceed the budget on the
         /// VL53L4CD and be at least the budget on the VL53L1X.
         /// VL53L1X budgets: 15 (short), 20, 33, 50, 100, 200, 500 ms;
-        /// VL53L4CD: 10–200 ms. `InvalidData` otherwise.
+        /// VL53L4CD: 10–200 ms. `InvalidArgument` otherwise.
         pub $($asyncness)? fn set_timing(&mut self, budget_ms: u16, inter_ms: u32) -> Result<(), Error<I2C::Error>> {
             let (a, b) = match self.variant {
                 Variant::Vl53l1x => {
                     if inter_ms != 0 && inter_ms < budget_ms as u32 {
-                        return Err(Error::InvalidData);
+                        return Err(Error::InvalidArgument);
                     }
-                    vl53l1x_timeouts(self.mode, budget_ms).ok_or(Error::InvalidData)?
+                    vl53l1x_timeouts(self.mode, budget_ms).ok_or(Error::InvalidArgument)?
                 }
                 Variant::Vl53l4cd => {
                     let osc = self.rd16(REG_OSC_FREQUENCY) $($aw)* ?;
-                    vl53l4cd_timeouts(osc, budget_ms as u32, inter_ms).ok_or(Error::InvalidData)?
+                    vl53l4cd_timeouts(osc, budget_ms as u32, inter_ms).ok_or(Error::InvalidArgument)?
                 }
             };
             let period = match (self.variant, inter_ms) {
@@ -590,23 +590,24 @@ macro_rules! api {
             self.wr16(REG_MIN_COUNT_RATE, kcps >> 3) $($aw)*
         }
 
-        /// Maximum sigma for a valid result, mm (≤ 16383).
+        /// Maximum sigma for a valid result, mm (≤ 16383, else
+        /// `InvalidArgument`).
         pub $($asyncness)? fn set_sigma_threshold(&mut self, mm: u16) -> Result<(), Error<I2C::Error>> {
             if mm > 0x3FFF {
-                return Err(Error::InvalidData);
+                return Err(Error::InvalidArgument);
             }
             self.wr16(REG_SIGMA_THRESH, mm << 2) $($aw)*
         }
 
         /// VL53L1X region of interest, `width` × `height` SPADs (4–16,
         /// larger values clamp to 16) around the optical centre.
-        /// `Unsupported` on the VL53L4CD.
+        /// `Unsupported` on the VL53L4CD, `InvalidArgument` below 4.
         pub $($asyncness)? fn set_roi(&mut self, width: u8, height: u8) -> Result<(), Error<I2C::Error>> {
             if self.variant != Variant::Vl53l1x {
                 return Err(Error::Unsupported);
             }
             if width < 4 || height < 4 {
-                return Err(Error::InvalidData);
+                return Err(Error::InvalidArgument);
             }
             let (w, h) = (width.min(16), height.min(16));
             let mut centre = self.rd8(REG_MODE_ROI_CENTRE_SPAD) $($aw)* ?;
@@ -854,10 +855,10 @@ mod tests {
         s.set_timing(15, 0).unwrap();
         assert_eq!(
             s.set_distance_mode(DistanceMode::Long),
-            Err(Error::InvalidData)
+            Err(Error::InvalidArgument)
         );
-        assert_eq!(s.set_timing(50, 20), Err(Error::InvalidData));
-        assert_eq!(s.set_roi(3, 8), Err(Error::InvalidData));
+        assert_eq!(s.set_timing(50, 20), Err(Error::InvalidArgument));
+        assert_eq!(s.set_roi(3, 8), Err(Error::InvalidArgument));
         s.set_roi(16, 4).unwrap();
         assert_eq!(s.start_measurement(), Ok(16_500));
         i2c.done();

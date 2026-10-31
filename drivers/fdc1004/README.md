@@ -6,7 +6,7 @@ liquid-level, proximity and capacitive soil probes.
 | | |
 |---|---|
 | Address | 0x50 (fixed) |
-| Output | femtofarads per slot in `Measurement`; optional `Quantity::SoilMoisture` (0.01 %) or `Quantity::Distance` (liquid level, mm) through `Mapping` |
+| Output | `Quantity::Capacitance` (fF) per measured slot; optional `Quantity::SoilMoisture` (0.01 %) or `Quantity::Distance` (liquid level, mm) through `Mapping` |
 | Range | ±15 pF input, plus a CAPDAC offset of up to 96.875 pF (3.125 pF steps) |
 | Rate | 100/200/400 S/s (10/5/2.5 ms per slot) |
 | Current | 750 µA converting, 29 µA standby |
@@ -15,12 +15,13 @@ liquid-level, proximity and capacitive soil probes.
 
 Notes:
 
-* There is no capacitance quantity in `Quantity`. Without a `Mapping`, the
-  `Readings` iterator is empty and the raw fF values are in
+* `Readings` yields one `Capacitance` per measured slot (M1..M4 order),
+  then the mapped quantity. The same values are in
   `Measurement::capacitance_ff`.
 * `configure(slot, MeasConfig)` enables a slot. The negative side is ground,
   a CAPDAC offset or a higher-numbered input (differential, where CAPDAC has
-  no effect). Invalid combinations return `InvalidData`.
+  no effect). Invalid combinations return `InvalidArgument`, as does
+  starting a measurement with no slot enabled.
 * The device can only trigger one single-shot slot at a time. With one
   slot enabled, the driver uses single-shot mode; the datasheet example
   `0x0540` sets REPEAT by mistake, so the correct value is `0x0440`. With

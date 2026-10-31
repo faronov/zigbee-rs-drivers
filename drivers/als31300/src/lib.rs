@@ -242,8 +242,12 @@ macro_rules! api {
 
         /// Read-modify-write an EEPROM register (0x02, 0x03, 0x0D–0x0F).
         /// Returns 0 if nothing changed, otherwise the 50 ms write time to
-        /// wait before the next access.
+        /// wait before the next access; `InvalidArgument` for any other
+        /// register.
         pub $($asyncness)? fn update_eeprom(&mut self, reg: u8, mask: u32, bits: u32) -> Result<WaitUs, Error<I2C::Error>> {
+            if !matches!(reg, 0x02 | 0x03 | 0x0D..=0x0F) {
+                return Err(Error::InvalidArgument);
+            }
             let old = self.read_register(reg) $($aw)* ?;
             let new = (old & !mask) | (bits & mask);
             if new == old {
@@ -265,8 +269,12 @@ macro_rules! api {
             self.update_eeprom(REG_EEPROM_02, MASK_MEASUREMENT, bits) $($aw)*
         }
 
-        /// Interrupt configuration (EEPROM 0x03).
+        /// Interrupt configuration (EEPROM 0x03). `InvalidArgument` for a
+        /// threshold code above 63.
         pub $($asyncness)? fn set_interrupt(&mut self, int: &Interrupt) -> Result<WaitUs, Error<I2C::Error>> {
+            if int.thresholds.iter().flatten().any(|&c| c > 0x3F) {
+                return Err(Error::InvalidArgument);
+            }
             self.update_eeprom(REG_EEPROM_03, 0x01FF_FFFF, int.register()) $($aw)*
         }
 
@@ -449,6 +457,12 @@ mod tests {
         assert_eq!(s.set_measurement(Bandwidth::Raw40k, ch, false), Ok(0));
         s.set_power_mode(PowerMode::DutyCycle(InactiveTime::Ms1000))
             .unwrap();
+        assert_eq!(s.update_eeprom(0x27, 1, 1), Err(Error::InvalidArgument));
+        let int = Interrupt {
+            thresholds: [Some(0x40), None, None],
+            ..Interrupt::default()
+        };
+        assert_eq!(s.set_interrupt(&int), Err(Error::InvalidArgument));
         i2c.done();
     }
 
