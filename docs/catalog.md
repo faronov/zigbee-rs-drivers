@@ -96,27 +96,27 @@ ZCL column: the cluster the main quantity maps to.
 
 | Crate | Parts | Bus | ZCL | Status |
 |---|---|---|---|---|
-| bh1750 | BH1750FVI, GY-302 | I2C | 0x0400 | planned |
-| bh1730 | BH1730FVC | I2C | 0x0400 | planned |
-| opt3001 | OPT3001, OPT3004, OPT3006 | I2C | 0x0400 | planned |
-| opt4001 | OPT4001, OPT4003 | I2C | 0x0400 | planned |
-| veml7700 | VEML7700, VEML6030 | I2C | 0x0400 | planned |
-| veml6031 | VEML6031, VEML6035 | I2C | 0x0400 | planned |
-| tsl2561 | TSL2560, TSL2561 | I2C | 0x0400 | planned |
-| tsl2591 | TSL2591 | I2C | 0x0400 | planned |
-| tsl2540 | TSL2540, TSL25403 | I2C | 0x0400 | planned |
-| ltr390 | LTR-390UV | I2C | 0x0400, UV index | planned |
-| ltr303 | LTR-303ALS, LTR-329ALS | I2C | 0x0400 | planned |
-| ltr55x | LTR-553ALS, LTR-559ALS (+ proximity) | I2C | 0x0400 | planned |
-| ltrf216a | LTR-F216A | I2C | 0x0400 | planned |
-| apds9306 | APDS-9306, APDS-9306-065 | I2C | 0x0400 | planned |
-| apds9960 | APDS-9960 (ALS, colour, proximity) | I2C | 0x0400 | planned |
-| max44009 | MAX44009, GY-49 | I2C | 0x0400 | planned |
-| isl29035 | ISL29035 | I2C | 0x0400 | planned |
-| tcs34725 | TCS34725 | I2C | 0x0400, colour | planned |
-| as7341 | AS7341 (spectral) | I2C | 0x0400 | planned |
-| vcnl4040 | VCNL4040 (ALS + proximity) | I2C | 0x0400 | planned |
-| si1145 | Si1145, Si1146, Si1147 (UV index, ALS, IR) | I2C | 0x0400, UV index | planned |
+| bh1750 | BH1750FVI, GY-302 | I2C | 0x0400 | mock-tested |
+| bh1730 | BH1730FVC | I2C | 0x0400 | mock-tested |
+| opt3001 | OPT3001, OPT3004, OPT3006 | I2C | 0x0400 | mock-tested |
+| opt4001 | OPT4001, OPT4003 | I2C | 0x0400 | mock-tested |
+| veml7700 | VEML7700, VEML6030 | I2C | 0x0400 | mock-tested |
+| veml6031 | VEML6031, VEML6035 | I2C | 0x0400 | mock-tested |
+| tsl2561 | TSL2560, TSL2561 | I2C | 0x0400 | mock-tested |
+| tsl2591 | TSL2591 | I2C | 0x0400 | mock-tested |
+| tsl2540 | TSL2540, TSL25403 | I2C | 0x0400 | mock-tested |
+| ltr390 | LTR-390UV | I2C | 0x0400, UV index | mock-tested |
+| ltr303 | LTR-303ALS, LTR-329ALS | I2C | 0x0400 | mock-tested |
+| ltr55x | LTR-553ALS, LTR-559ALS (+ proximity) | I2C | 0x0400 | mock-tested |
+| ltrf216a | LTR-F216A | I2C | 0x0400 | mock-tested |
+| apds9306 | APDS-9306, APDS-9306-065 | I2C | 0x0400 | mock-tested |
+| apds9960 | APDS-9960 (ALS, colour, proximity) | I2C | 0x0400 | mock-tested |
+| max44009 | MAX44009, GY-49 | I2C | 0x0400 | mock-tested |
+| isl29035 | ISL29035 | I2C | 0x0400 | mock-tested |
+| tcs34725 | TCS34725 | I2C | 0x0400, colour | mock-tested |
+| as7341 | AS7341 (spectral) | I2C | 0x0400 | mock-tested |
+| vcnl4040 | VCNL4040 (ALS + proximity) | I2C | 0x0400 | mock-tested |
+| si1145 | Si1145, Si1146, Si1147 (UV index, ALS, IR) | I2C | 0x0400, UV index | mock-tested |
 
 ## F. Air quality, CO2, particulate
 
