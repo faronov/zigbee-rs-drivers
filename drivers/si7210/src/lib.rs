@@ -430,18 +430,18 @@ macro_rules! api {
         }
 
         /// Use `filter` for every burst (rewritten after every wake).
-        /// `InvalidData` if out of range.
+        /// `InvalidArgument` if out of range.
         pub fn set_filter(&mut self, filter: Filter) -> Result<(), Error<I2C::Error>> {
-            let ctrl4 = filter.ctrl4().ok_or(Error::InvalidData)?;
+            let ctrl4 = filter.ctrl4().ok_or(Error::InvalidArgument)?;
             self.ctrl4 = Some(ctrl4);
             Ok(())
         }
 
-                /// Program the output switch and set `Usestore` so it survives
-        /// sleep.
+        /// Program the output switch and set `Usestore` so it survives
+        /// sleep. `InvalidArgument` if a code is out of range.
         pub $($asyncness)? fn set_switch(&mut self, switch: &Switch) -> Result<(), Error<I2C::Error>> {
             if switch.threshold > LATCH || switch.hysteresis > NO_HYSTERESIS {
-                return Err(Error::InvalidData);
+                return Err(Error::InvalidArgument);
             }
             self.wake_up() $($aw)* ?;
             let [c1, c2] = switch.registers();
@@ -758,6 +758,15 @@ mod tests {
         let mut i2c = Mock::new(&[T::write(A, vec![]), rd(REG_HREVID, 0x24)]);
         let mut s = Si7210::new(i2c.clone(), A, Scale::Mt20);
         assert_eq!(s.probe(), Err(Error::UnexpectedId(0x24)));
+        let fir = Filter::Fir { log2_samples: 13 };
+        assert_eq!(s.set_filter(fir), Err(Error::InvalidArgument));
+        let sw = Switch {
+            threshold: LATCH + 1,
+            hysteresis: 0,
+            low_for_field: false,
+            polarity: Polarity::Omnipolar,
+        };
+        assert_eq!(s.set_switch(&sw), Err(Error::InvalidArgument));
         i2c.done();
     }
 

@@ -300,7 +300,7 @@ pub struct Measurement {
     pub field: Vector3,
     /// Temperature, 0.01 °C.
     pub temperature: Option<i32>,
-    /// Angle between the selected axes (no ZCL quantity yet).
+    /// Angle between the selected axes.
     pub angle: Option<Angle>,
     /// Vector magnitude code from the angle engine.
     pub magnitude: Option<u8>,
@@ -311,6 +311,9 @@ impl Readings for Measurement {
         f(Quantity::MagneticField(self.field));
         if let Some(t) = self.temperature {
             f(Quantity::Temperature(t));
+        }
+        if let Some(a) = self.angle {
+            f(Quantity::Angle(a.centidegrees() as i32));
         }
     }
 }
@@ -412,11 +415,11 @@ macro_rules! api {
             Ok(self.version)
         }
 
-        /// Apply `config` and clear the POR flag. `InvalidData` if
+        /// Apply `config` and clear the POR flag. `InvalidArgument` if
         /// `averaging` > 5.
         pub $($asyncness)? fn configure(&mut self, config: &Config) -> Result<(), Error<I2C::Error>> {
             if config.averaging > 5 {
-                return Err(Error::InvalidData);
+                return Err(Error::InvalidArgument);
             }
             self.write(&config.registers()) $($aw)* ?;
             self.write(&[REG_T_CONFIG, config.temperature as u8]) $($aw)* ?;
@@ -566,7 +569,7 @@ mod tests {
     use super::*;
     use embedded_hal::i2c::ErrorKind;
     use embedded_hal_mock::eh1::i2c::{Mock, Transaction as T};
-    use std::vec;
+    use std::{vec, vec::Vec};
     use zigbee_sensor::blocking::{LowPower, Sensor};
 
     const A: u8 = Address::A as u8;
@@ -637,6 +640,12 @@ mod tests {
         assert_eq!(m.temperature, Some(2_500));
         assert_eq!(m.angle, Some(Angle(0x1628)));
         assert_eq!(m.magnitude, Some(0x7F));
+        let mut out = Vec::new();
+        m.for_each(&mut |q| out.push(q));
+        assert_eq!(
+            out[1..],
+            [Quantity::Temperature(2_500), Quantity::Angle(35_450)]
+        );
         i2c.done();
     }
 
@@ -645,6 +654,11 @@ mod tests {
         let mut i2c = Mock::new(&[T::write_read(A, vec![0x0D], vec![0x01, 0x00, 0x00])]);
         let mut s = Tmag5273::new(i2c.clone(), A);
         assert_eq!(s.probe(), Err(Error::UnexpectedId(0)));
+        let bad = Config {
+            averaging: 6,
+            ..Config::default()
+        };
+        assert_eq!(s.configure(&bad), Err(Error::InvalidArgument));
         i2c.done();
     }
 

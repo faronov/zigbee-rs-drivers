@@ -758,14 +758,14 @@ macro_rules! api {
         }
 
         /// Set the measurement timing budget (≥ [`MIN_BUDGET_US`]; ≈33 ms
-        /// after init, 200 ms for high accuracy). `InvalidData` if it is
-        /// too short.
+        /// after init, 200 ms for high accuracy). `InvalidArgument` if it
+        /// is too short for the enabled sequence steps.
         pub $($asyncness)? fn set_timing_budget(&mut self, budget_us: u32) -> Result<(), Error<I2C::Error>> {
             if budget_us < MIN_BUDGET_US {
-                return Err(Error::InvalidData);
+                return Err(Error::InvalidArgument);
             }
             let timing = self.read_timing() $($aw)* ?;
-            let reg = timing.final_timeout_for(budget_us).ok_or(Error::InvalidData)?;
+            let reg = timing.final_timeout_for(budget_us).ok_or(Error::InvalidArgument)?;
             self.wr16(REG_FINAL_RANGE_TIMEOUT, reg) $($aw)* ?;
             self.budget_us = budget_us;
             Ok(())
@@ -1071,7 +1071,7 @@ mod tests {
         e.extend(clear());
         let mut i2c = Mock::new(&e);
         let mut s = Vl53l0x::new(i2c.clone());
-        assert_eq!(s.set_timing_budget(19_000), Err(Error::InvalidData));
+        assert_eq!(s.set_timing_budget(19_000), Err(Error::InvalidArgument));
         s.set_timing_budget(20_000).unwrap();
         assert_eq!(s.start_measurement(), Ok(22_000));
         assert_eq!(s.read_measurement(), Err(Error::NotReady));

@@ -5,9 +5,9 @@
 //!
 //! * Four measurement slots ([`Slot`]), each single-ended (against ground
 //!   or the CAPDAC offset) or differential ([`MeasConfig`]).
-//! * Results are reported in femtofarads (no ZCL capacitance quantity
-//!   exists). An optional [`Mapping`] turns them into
-//!   `Quantity::SoilMoisture` or a liquid level as `Quantity::Distance`.
+//! * Each measured slot is reported as `Quantity::Capacitance` (fF), in
+//!   slot order. An optional [`Mapping`] adds `Quantity::SoilMoisture` or
+//!   a liquid level as `Quantity::Distance`.
 //! * One configured slot is converted single-shot. The device allows
 //!   only one single-shot trigger at a time, so several slots are
 //!   converted in repeat mode, and repeat mode is stopped once all results
@@ -231,7 +231,12 @@ pub struct Measurement {
 }
 
 impl Readings for Measurement {
+    /// `Capacitance` for every measured slot (M1..M4), then the mapped
+    /// quantity, if any.
     fn for_each(&self, f: &mut dyn FnMut(Quantity)) {
+        for c in self.capacitance_ff.iter().flatten() {
+            f(Quantity::Capacitance(*c));
+        }
         if let Some(q) = self.mapped {
             f(q);
         }
@@ -324,11 +329,11 @@ macro_rules! api {
             Ok(())
         }
 
-        /// Configure and enable `slot`. `InvalidData` for a CAPDAC code
+        /// Configure and enable `slot`. `InvalidArgument` for a CAPDAC code
         /// above 31 or a differential pair whose negative input is not
         /// higher-numbered than the positive one.
         pub $($asyncness)? fn configure(&mut self, slot: Slot, config: &MeasConfig) -> Result<(), Error<I2C::Error>> {
-            let reg = config.register().ok_or(Error::InvalidData)?;
+            let reg = config.register().ok_or(Error::InvalidArgument)?;
             self.write_register(REG_CONF_MEAS1 + slot as u8, reg) $($aw)* ?;
             self.offsets[slot as usize] = config.offset_ff();
             self.enabled |= 1 << slot as u8;
@@ -355,7 +360,7 @@ macro_rules! api {
         $($asyncness)? fn trigger(&mut self) -> Result<WaitUs, Error<I2C::Error>> {
             let n = self.enabled.count_ones();
             if n == 0 {
-                return Err(Error::InvalidData);
+                return Err(Error::InvalidArgument);
             }
             let meas = (self.enabled.reverse_bits() >> 4) as u16;
             let repeat = if n > 1 { REPEAT } else { 0 };
@@ -408,7 +413,7 @@ impl<I2C: embedded_hal::i2c::I2c> zigbee_sensor::blocking::Sensor for Fdc1004<I2
     type BusError = I2C::Error;
     type Measurement = Measurement;
 
-    /// `InvalidData` if no slot is configured.
+    /// `InvalidArgument` if no slot is configured.
     fn start_measurement(&mut self) -> Result<WaitUs, Error<I2C::Error>> {
         self.trigger()
     }
@@ -455,7 +460,7 @@ mod tests {
 
     use super::*;
     use embedded_hal_mock::eh1::i2c::{Mock, Transaction as T};
-    use std::vec;
+    use std::{vec, vec::Vec};
     use zigbee_sensor::blocking::Sensor;
 
     fn reg(r: u8, v: u16) -> T {
@@ -528,6 +533,12 @@ mod tests {
         // 31.25 pF CAPDAC + 1 pF.
         assert_eq!(m.capacitance_ff, [None, Some(32_250), None, None]);
         assert_eq!(m.mapped, Some(Quantity::SoilMoisture(2_250)));
+        let mut out = Vec::new();
+        m.for_each(&mut |q| out.push(q));
+        assert_eq!(
+            out,
+            [Quantity::Capacitance(32_250), Quantity::SoilMoisture(2_250)]
+        );
         i2c.done();
     }
 
@@ -536,6 +547,12 @@ mod tests {
         let mut i2c = Mock::new(&[reg(0xFE, 0x5449), reg(0xFF, 0x2114)]);
         let mut s = Fdc1004::new(i2c.clone());
         assert_eq!(s.probe(), Err(Error::UnexpectedId(0x5449_2114)));
+        assert_eq!(s.start_measurement(), Err(Error::InvalidArgument));
+        let bad = MeasConfig {
+            positive: Input::Cin1,
+            negative: Negative::Capdac(32),
+        };
+        assert_eq!(s.configure(Slot::M1, &bad), Err(Error::InvalidArgument));
         i2c.done();
     }
 

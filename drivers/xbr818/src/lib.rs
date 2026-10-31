@@ -180,11 +180,11 @@ macro_rules! common {
             Ok(b[0])
         }
 
-        /// Write `config` (I2C_EN must be high). Returns `InvalidData` for
+        /// Write `config` (I2C_EN must be high). Returns `InvalidArgument` for
         /// an out-of-range field without touching the chip.
         pub $($asyncness)? fn configure(&mut self, config: &Config) -> Result<(), Error<BusError<I::Error, P::Error>>> {
             if !config.valid() {
-                return Err(Error::InvalidData);
+                return Err(Error::InvalidArgument);
             }
             self.write(&[REG_DETECT_CTL, 0x00]) $($aw)* ?;
             let rf = self.read_register(REG_RF_POWER) $($aw)* ?;
@@ -356,7 +356,7 @@ mod tests {
             rf_power: 8,
             ..Config::default()
         };
-        assert_eq!(s.configure(&bad), Err(Error::InvalidData));
+        assert_eq!(s.configure(&bad), Err(Error::InvalidArgument));
         i2c.done();
         pin.done();
     }

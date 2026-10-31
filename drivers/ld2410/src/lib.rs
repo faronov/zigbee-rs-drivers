@@ -720,7 +720,7 @@ macro_rules! api {
             unmanned_s: u16,
         ) -> Result<(), Error<U::Error>> {
             if !(2..=MAX_GATE).contains(&moving) || !(2..=MAX_GATE).contains(&stationary) {
-                return Err(Error::InvalidData);
+                return Err(Error::InvalidArgument);
             }
             let cmd = Command::SetMaxGates { moving, stationary, unmanned_s };
             self.command(&cmd) $($aw)* .map(drop)
@@ -734,7 +734,7 @@ macro_rules! api {
             stationary: u8,
         ) -> Result<(), Error<U::Error>> {
             if gate.is_some_and(|g| g > MAX_GATE) || moving > 100 || stationary > 100 {
-                return Err(Error::InvalidData);
+                return Err(Error::InvalidArgument);
             }
             let cmd = Command::SetSensitivity { gate, moving, stationary };
             self.command(&cmd) $($aw)* .map(drop)
@@ -1159,7 +1159,7 @@ mod tests {
         ]);
         let mut s = Ld2410::new(uart);
         assert_eq!(s.set_engineering_mode(true), Err(Error::InvalidData));
-        assert_eq!(s.set_max_gates(1, 8, 5), Err(Error::InvalidData));
+        assert_eq!(s.set_max_gates(1, 8, 5), Err(Error::InvalidArgument));
     }
 
     #[test]

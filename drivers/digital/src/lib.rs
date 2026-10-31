@@ -23,10 +23,10 @@
 //! return the instantaneous (not debounced) pin state, for nodes that only
 //! poll a contact when they wake up.
 //!
-//! Only [`Kind::Occupancy`] maps to a [`Quantity`] (`Occupancy`, ZCL 0x0406).
-//! `zigbee_sensor::Quantity` has no contact/alarm variant yet, so the other
-//! kinds are exposed through the typed [`Reading`] (usually reported via an
-//! IAS Zone ZoneStatus bit or an OnOff/BinaryInput attribute).
+//! [`Reading`] emits `Quantity::Occupancy` for PIR (ZCL 0x0406),
+//! `Quantity::Contact` for reed contacts and hall switches (`true` =
+//! closed / magnet present) and `Quantity::Alarm` for water leak and
+//! vibration (usually reported via an IAS Zone ZoneStatus bit).
 //!
 //! ```ignore
 //! let mut pir = PinDetector::new(pin, Config::pir(60_000));
@@ -69,13 +69,15 @@ impl ActiveLevel {
 pub enum Kind {
     /// PIR / microwave motion output: `Quantity::Occupancy`.
     Occupancy,
-    /// Reed or mechanical contact: active = closed.
+    /// Reed or mechanical contact: active = closed; `Quantity::Contact`.
     Contact,
-    /// Water-leak probe: active = water detected.
+    /// Water-leak probe: active = water detected; `Quantity::Alarm`.
     WaterLeak,
-    /// Digital hall switch: active = magnet present.
+    /// Digital hall switch: active = magnet present; `Quantity::Contact`
+    /// (closed when the magnet is near, as in door sensors).
     HallSwitch,
-    /// Vibration / tilt switch: active = vibration detected.
+    /// Vibration / tilt switch: active = vibration detected;
+    /// `Quantity::Alarm`.
     Vibration,
 }
 
@@ -164,12 +166,13 @@ pub struct Reading {
 }
 
 impl Readings for Reading {
-    /// Emits `Occupancy` for [`Kind::Occupancy`]; the other kinds have no
-    /// `Quantity` variant yet and emit nothing (use the fields directly).
+    /// Emits `Occupancy`, `Contact` or `Alarm` depending on [`Kind`].
     fn for_each(&self, f: &mut dyn FnMut(Quantity)) {
-        if self.kind == Kind::Occupancy {
-            f(Quantity::Occupancy(self.active));
-        }
+        f(match self.kind {
+            Kind::Occupancy => Quantity::Occupancy(self.active),
+            Kind::Contact | Kind::HallSwitch => Quantity::Contact(self.active),
+            Kind::WaterLeak | Kind::Vibration => Quantity::Alarm(self.active),
+        });
     }
 }
 
@@ -506,19 +509,27 @@ mod tests {
     }
 
     #[test]
-    fn readings_only_for_occupancy() {
+    fn readings_per_kind() {
         let mut out = Vec::new();
-        Reading {
-            kind: Kind::Occupancy,
-            active: true,
+        for (kind, active) in [
+            (Kind::Occupancy, true),
+            (Kind::Contact, false),
+            (Kind::HallSwitch, true),
+            (Kind::WaterLeak, true),
+            (Kind::Vibration, false),
+        ] {
+            Reading { kind, active }.for_each(&mut |q| out.push(q));
         }
-        .for_each(&mut |q| out.push(q));
-        Reading {
-            kind: Kind::Contact,
-            active: true,
-        }
-        .for_each(&mut |q| out.push(q));
-        assert_eq!(out, [Quantity::Occupancy(true)]);
+        assert_eq!(
+            out,
+            [
+                Quantity::Occupancy(true),
+                Quantity::Contact(false),
+                Quantity::Contact(true),
+                Quantity::Alarm(true),
+                Quantity::Alarm(false),
+            ]
+        );
     }
 
     #[test]
