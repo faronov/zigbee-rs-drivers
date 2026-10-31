@@ -197,13 +197,13 @@ macro_rules! methods {
         /// compensation (`mbar` 700–1400, 0 = off; overrides the altitude).
         /// Also used to update the pressure while running. Returns the
         /// configured interval; invalid pressures give
-        /// [`Error::InvalidData`] without bus traffic.
+        /// [`Error::InvalidArgument`] without bus traffic.
         pub $($async)* fn start_continuous_measurement(
             &mut self,
             mbar: u16,
         ) -> Result<WaitUs, Error<I2C::Error>> {
             if mbar != 0 && !(700..=1400).contains(&mbar) {
-                return Err(Error::InvalidData);
+                return Err(Error::InvalidArgument);
             }
             self.send(cmd::TRIGGER_CONTINUOUS, &[mbar]) $($aw)* ?;
             self.pressure_mbar = mbar;
@@ -221,13 +221,13 @@ macro_rules! methods {
         }
 
         /// Set the measurement interval, 2–1800 s (non-volatile). Other
-        /// values give [`Error::InvalidData`].
+        /// values give [`Error::InvalidArgument`].
         pub $($async)* fn set_measurement_interval(
             &mut self,
             seconds: u16,
         ) -> Result<WaitUs, Error<I2C::Error>> {
             if !(2..=1800).contains(&seconds) {
-                return Err(Error::InvalidData);
+                return Err(Error::InvalidArgument);
             }
             self.send(cmd::MEASUREMENT_INTERVAL, &[seconds]) $($aw)* ?;
             self.interval_s = seconds;
@@ -272,13 +272,13 @@ macro_rules! methods {
 
         /// Forced recalibration to a reference of 400–2000 ppm (run the
         /// sensor ≥ 2 min at a 2 s interval first). Other values give
-        /// [`Error::InvalidData`].
+        /// [`Error::InvalidArgument`].
         pub $($async)* fn set_forced_recalibration(
             &mut self,
             ppm: u16,
         ) -> Result<WaitUs, Error<I2C::Error>> {
             if !(400..=2000).contains(&ppm) {
-                return Err(Error::InvalidData);
+                return Err(Error::InvalidArgument);
             }
             self.send(cmd::FRC, &[ppm]) $($aw)*
         }
@@ -526,11 +526,14 @@ mod tests {
         assert_eq!(scd.firmware_version(&mut delay).unwrap(), (3, 0x42));
         scd.stop_continuous_measurement().unwrap();
         assert_eq!(scd.soft_reset().unwrap(), 2_000_000);
-        assert_eq!(scd.set_measurement_interval(1), Err(Error::InvalidData));
-        assert_eq!(scd.set_forced_recalibration(300), Err(Error::InvalidData));
+        assert_eq!(scd.set_measurement_interval(1), Err(Error::InvalidArgument));
+        assert_eq!(
+            scd.set_forced_recalibration(300),
+            Err(Error::InvalidArgument)
+        );
         assert_eq!(
             scd.start_continuous_measurement(500),
-            Err(Error::InvalidData)
+            Err(Error::InvalidArgument)
         );
         delay.done();
         i2c.done();

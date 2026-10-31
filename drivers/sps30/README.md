@@ -4,7 +4,7 @@ Sensirion SPS30 optical particulate matter sensor, used over I2C. The driver use
 
 - start and stop measurement, data-ready flag, measured values
 - PM1.0, PM2.5, PM4.0 and PM10 mass concentration in 0.1 µg/m³ (1 µg/m³ resolution)
-- number concentrations (#/cm³) and typical particle size (nm)
+- number concentrations (0.01 #/cm³) and typical particle size (nm)
 - sleep and wake-up (`LowPower`)
 - manual fan cleaning and the auto-cleaning interval
 - device status register (read and clear)
@@ -46,4 +46,4 @@ Auto-cleaning runs every 168 h by default, but the counter restarts at power-off
 
 ## Number concentrations and particle size
 
-These are decoded into `Measurement`, but `Readings` emits only the four PM mass quantities. The core has no quantity for number concentration or particle size.
+`Readings` emits the four PM mass values, then the five number concentrations as `Quantity::ParticlesBelow` (size bounds 500, 1000, 2500, 4000 and 10 000 nm; counts in 0.01 #/cm³, sensor resolution 1 #/cm³), then `Quantity::TypicalParticleSize` in nm.

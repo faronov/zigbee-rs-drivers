@@ -76,20 +76,28 @@ pub struct Measurement {
     pub pm4_0: u32,
     /// PM10 mass concentration, 0.1 µg/m³.
     pub pm10: u32,
-    /// Number concentration of PM0.5, PM1.0, PM2.5, PM4.0, PM10 in #/cm³.
-    pub number: [u16; 5],
+    /// Number concentration of particles up to [`NC_SIZES_NM`] (PM0.5,
+    /// PM1.0, PM2.5, PM4.0, PM10), 0.01 #/cm³ (sensor resolution 1 #/cm³).
+    pub number: [u32; 5],
     /// Typical particle size in nm.
     pub typical_size_nm: u16,
 }
 
+/// Upper size bounds of the number-concentration bins, nm.
+pub const NC_SIZES_NM: [u16; 5] = [500, 1000, 2500, 4000, 10_000];
+
 impl Readings for Measurement {
-    /// Mass concentrations only; number concentrations and particle size
-    /// have no [`Quantity`] yet.
     fn for_each(&self, f: &mut dyn FnMut(Quantity)) {
         f(Quantity::Pm1(self.pm1_0));
         f(Quantity::Pm25(self.pm2_5));
         f(Quantity::Pm4(self.pm4_0));
         f(Quantity::Pm10(self.pm10));
+        for (&size_nm, &count) in NC_SIZES_NM.iter().zip(&self.number) {
+            f(Quantity::ParticlesBelow { size_nm, count });
+        }
+        f(Quantity::TypicalParticleSize(u32::from(
+            self.typical_size_nm,
+        )));
     }
 }
 
@@ -100,7 +108,7 @@ fn convert(w: &[u16; 10]) -> Measurement {
         pm2_5: mass(1),
         pm4_0: mass(2),
         pm10: mass(3),
-        number: [w[4], w[5], w[6], w[7], w[8]],
+        number: [w[4], w[5], w[6], w[7], w[8]].map(|n| u32::from(n) * 100),
         typical_size_nm: w[9],
     }
 }
@@ -425,7 +433,7 @@ mod tests {
                 pm2_5: 50,
                 pm4_0: 60,
                 pm10: 70,
-                number: [20, 24, 25, 25, 25],
+                number: [2000, 2400, 2500, 2500, 2500],
                 typical_size_nm: 480,
             }
         );
@@ -437,7 +445,28 @@ mod tests {
                 Quantity::Pm1(30),
                 Quantity::Pm25(50),
                 Quantity::Pm4(60),
-                Quantity::Pm10(70)
+                Quantity::Pm10(70),
+                Quantity::ParticlesBelow {
+                    size_nm: 500,
+                    count: 2000
+                },
+                Quantity::ParticlesBelow {
+                    size_nm: 1000,
+                    count: 2400
+                },
+                Quantity::ParticlesBelow {
+                    size_nm: 2500,
+                    count: 2500
+                },
+                Quantity::ParticlesBelow {
+                    size_nm: 4000,
+                    count: 2500
+                },
+                Quantity::ParticlesBelow {
+                    size_nm: 10_000,
+                    count: 2500
+                },
+                Quantity::TypicalParticleSize(480),
             ]
         );
         assert_eq!(sps.stop_measurement().unwrap(), 20_000);
