@@ -16,15 +16,14 @@
 //!   pressure, so a sample takes two conversions, like the BMP180:
 //!   [`start_measurement`] starts the temperature conversion; the first
 //!   [`read_measurement`] reads it, starts the pressure conversion and
-//!   returns [`Error::NotReady`]; after [`XgzpC::pending_wait_us`] the
-//!   second call returns the sample. [`XgzpC::measure_full`] runs the whole
-//!   cycle. Pressure is `raw / 2^21 · (PMAX − PMIN)` with the range of the
+//!   returns [`Error::Pending`] with the wait; the second call returns the
+//!   sample. The `measure` helpers follow this phase. Pressure is `raw / 2^21 · (PMAX − PMIN)` with the range of the
 //!   part; temperature uses two factory calibration registers read by
 //!   [`XgzpC::init`].
 //!
 //! Pressure can be negative (vacuum and differential ranges), so
-//! [`Measurement::pressure`] is signed; [`Readings`] only reports
-//! [`Quantity::Pressure`] for non-negative values.
+//! [`Measurement::pressure`] is signed and [`Readings`] reports it as
+//! [`Quantity::GaugePressure`].
 //!
 //! References: CFSensor XGZP6897D datasheet V2.7 (2023-02), XGZP6847D
 //! datasheet V2.8 (2024-09, 0x6D protocol) and V3.2 (2026-08, 0x58
@@ -50,6 +49,10 @@ pub const CONVERSION_US: WaitUs = 20_000;
 /// conversion time (5 ms response time in normal mode); 20 ms is the wait
 /// used by the vendor sample code.
 pub const PHASE_US: WaitUs = 20_000;
+
+/// Largest [`XgzpC`] range span (PMAX − PMIN) in Pa for which the full
+/// 24-bit output still fits the 0.01 Pa result.
+pub const MAX_SPAN_PA: u32 = 5_000_000;
 
 const REG_CMD: u8 = 0x30;
 const CMD_COMBINED: u8 = 0x0A;
@@ -117,9 +120,7 @@ impl Measurement {
 impl Readings for Measurement {
     fn for_each(&self, f: &mut dyn FnMut(Quantity)) {
         f(Quantity::Temperature(self.temperature));
-        if let Ok(p) = u32::try_from(self.pressure) {
-            f(Quantity::Pressure(p));
-        }
+        f(Quantity::GaugePressure(self.pressure));
     }
 }
 
@@ -213,15 +214,6 @@ enum Phase {
     Pressure(i32),
 }
 
-impl Phase {
-    const fn wait_us(self) -> WaitUs {
-        match self {
-            Self::Idle => 0,
-            _ => PHASE_US,
-        }
-    }
-}
-
 macro_rules! xgzp_common {
     ($name:ident) => {
         impl<I2C> $name<I2C> {
@@ -245,6 +237,14 @@ macro_rules! xgzp_common {
             /// Configured K factor.
             pub const fn k(&self) -> u16 {
                 self.k
+            }
+
+            fn check_k<E>(&self) -> Result<(), Error<E>> {
+                if self.k == 0 {
+                    Err(Error::InvalidArgument)
+                } else {
+                    Ok(())
+                }
             }
 
             /// Give the bus back.
@@ -284,15 +284,22 @@ macro_rules! xgzp_c_common {
                 self.calibration
             }
 
-            /// Wait before the next `read_measurement`: [`crate::PHASE_US`]
-            /// while a conversion runs, 0 when idle.
-            pub const fn pending_wait_us(&self) -> WaitUs {
-                self.phase.wait_us()
-            }
-
             /// Give the bus back.
             pub fn release(self) -> I2C {
                 self.i2c
+            }
+
+            /// `NotReady` before `init`, `InvalidArgument` for an empty,
+            /// reversed or too wide (> [`crate::MAX_SPAN_PA`]) range.
+            fn check_start<E>(&self) -> Result<(), Error<E>> {
+                let span = i64::from(self.pmax) - i64::from(self.pmin);
+                if span <= 0 || span > i64::from(crate::MAX_SPAN_PA) {
+                    Err(Error::InvalidArgument)
+                } else if self.calibration.is_none() {
+                    Err(Error::NotReady)
+                } else {
+                    Ok(())
+                }
             }
 
             fn check_id<E>(&self, id: u8) -> Result<(), Error<E>> {
@@ -346,7 +353,9 @@ impl<I2C: embedded_hal::i2c::I2c> zigbee_sensor::blocking::Sensor for Xgzp<I2C> 
     type BusError = I2C::Error;
     type Measurement = Measurement;
 
+    /// [`Error::InvalidArgument`] if K is 0.
     fn start_measurement(&mut self) -> Result<WaitUs, Error<I2C::Error>> {
+        self.check_k()?;
         self.i2c
             .write(self.address, &[REG_CMD, CMD_COMBINED])
             .map_err(Error::bus)?;
@@ -428,40 +437,24 @@ impl<I2C: embedded_hal::i2c::I2c> XgzpC<I2C> {
         self.phase = Phase::Idle;
         Ok(cal)
     }
-
-    /// Start, wait and read both phases.
-    pub fn measure_full<D: embedded_hal::delay::DelayNs>(
-        &mut self,
-        delay: &mut D,
-    ) -> Result<Measurement, Error<I2C::Error>> {
-        use zigbee_sensor::blocking::Sensor;
-        let mut wait = self.start_measurement()?;
-        loop {
-            delay.delay_us(wait);
-            match self.read_measurement() {
-                Err(Error::NotReady) if self.phase != Phase::Idle => wait = self.pending_wait_us(),
-                other => return other,
-            }
-        }
-    }
 }
 
 impl<I2C: embedded_hal::i2c::I2c> zigbee_sensor::blocking::Sensor for XgzpC<I2C> {
     type BusError = I2C::Error;
     type Measurement = Measurement;
 
-    /// Start the temperature conversion. [`Error::NotReady`] before `init`.
+    /// Start the temperature conversion. [`Error::NotReady`] before `init`;
+    /// [`Error::InvalidArgument`] if the range is reversed or wider than
+    /// [`MAX_SPAN_PA`].
     fn start_measurement(&mut self) -> Result<WaitUs, Error<I2C::Error>> {
-        if self.calibration.is_none() {
-            return Err(Error::NotReady);
-        }
+        self.check_start()?;
         self.trigger(false)?;
         self.phase = Phase::Temperature;
         Ok(PHASE_US)
     }
 
     /// First call after a start: read the temperature, start the pressure
-    /// conversion, return [`Error::NotReady`]. Second call: the sample.
+    /// conversion, return [`Error::Pending`]. Second call: the sample.
     fn read_measurement(&mut self) -> Result<Measurement, Error<I2C::Error>> {
         match (self.phase, self.calibration) {
             (Phase::Temperature, Some(cal)) => {
@@ -469,7 +462,7 @@ impl<I2C: embedded_hal::i2c::I2c> zigbee_sensor::blocking::Sensor for XgzpC<I2C>
                 let t = cal.temperature(i16::from_be_bytes(raw));
                 self.trigger(true)?;
                 self.phase = Phase::Pressure(t);
-                Err(Error::NotReady)
+                Err(Error::Pending(PHASE_US))
             }
             (Phase::Pressure(t), _) => {
                 let raw = self.read::<3>(REG_P)?;
@@ -522,6 +515,7 @@ pub mod asynch {
         type Measurement = Measurement;
 
         async fn start_measurement(&mut self) -> Result<WaitUs, Error<I2C::Error>> {
+            self.check_k()?;
             self.i2c
                 .write(self.address, &[REG_CMD, CMD_COMBINED])
                 .await
@@ -605,24 +599,6 @@ pub mod asynch {
             self.phase = Phase::Idle;
             Ok(cal)
         }
-
-        /// See [`super::XgzpC::measure_full`].
-        pub async fn measure_full<D: embedded_hal_async::delay::DelayNs>(
-            &mut self,
-            delay: &mut D,
-        ) -> Result<Measurement, Error<I2C::Error>> {
-            use zigbee_sensor::asynch::Sensor;
-            let mut wait = self.start_measurement().await?;
-            loop {
-                delay.delay_us(wait).await;
-                match self.read_measurement().await {
-                    Err(Error::NotReady) if self.phase != Phase::Idle => {
-                        wait = self.pending_wait_us();
-                    }
-                    other => return other,
-                }
-            }
-        }
     }
 
     impl<I2C: I2c> zigbee_sensor::asynch::Sensor for XgzpC<I2C> {
@@ -630,9 +606,7 @@ pub mod asynch {
         type Measurement = Measurement;
 
         async fn start_measurement(&mut self) -> Result<WaitUs, Error<I2C::Error>> {
-            if self.calibration.is_none() {
-                return Err(Error::NotReady);
-            }
+            self.check_start()?;
             self.trigger(false).await?;
             self.phase = Phase::Temperature;
             Ok(PHASE_US)
@@ -645,7 +619,7 @@ pub mod asynch {
                     let t = cal.temperature(i16::from_be_bytes(raw));
                     self.trigger(true).await?;
                     self.phase = Phase::Pressure(t);
-                    Err(Error::NotReady)
+                    Err(Error::Pending(PHASE_US))
                 }
                 (Phase::Pressure(t), _) => {
                     let raw = self.read::<3>(REG_P).await?;
@@ -690,7 +664,7 @@ mod tests {
         let m = decode_k(&[0x01, 0x86, 0xA0, 0x19, 0x00], 64).unwrap();
         assert_eq!(m, Measurement::new(2_500, 156_250));
         assert_eq!(m.pressure, 1_563);
-        // −64 / 64 = −1 Pa; −1 °C; negative pressure is not reported.
+        // −64 / 64 = −1 Pa; −1 °C; negative gauge pressure is reported.
         let m = decode_k(&[0xFF, 0xFF, 0xC0, 0xFF, 0x00], 64).unwrap();
         assert_eq!(
             (m.pressure, m.pressure_centi, m.temperature),
@@ -698,7 +672,10 @@ mod tests {
         );
         let mut q = Vec::new();
         m.for_each(&mut |x| q.push(x));
-        assert_eq!(q, [Quantity::Temperature(-100)]);
+        assert_eq!(
+            q,
+            [Quantity::Temperature(-100), Quantity::GaugePressure(-1)]
+        );
         assert_eq!(decode_k(&[0; 5], 0), None);
     }
 
@@ -800,16 +777,30 @@ mod tests {
         assert_eq!(x.probe(), Err(Error::UnexpectedId(0x6D)));
         assert_eq!(x.start_measurement(), Err(Error::NotReady));
         x.init().unwrap();
-        assert_eq!(x.pending_wait_us(), 0);
+        assert_eq!(x.read_measurement(), Err(Error::NotReady));
         assert_eq!(x.start_measurement().unwrap(), PHASE_US);
         // 0xE080 = −8064 → 26 °C; pressure conversion started.
-        assert_eq!(x.read_measurement(), Err(Error::NotReady));
-        assert_eq!(x.pending_wait_us(), PHASE_US);
+        assert_eq!(x.read_measurement(), Err(Error::Pending(PHASE_US)));
         // 2^20 / 2^21 · 80 kPa = 40 kPa.
         let m = x.read_measurement().unwrap();
         assert_eq!((m.temperature, m.pressure), (2_600, 40_000));
-        assert_eq!(x.pending_wait_us(), 0);
         assert_eq!(x.read_measurement(), Err(Error::NotReady));
+        i2c.done();
+    }
+
+    #[test]
+    fn invalid_arguments() {
+        let mut i2c = I2cMock::new(&[]);
+        assert_eq!(
+            Xgzp::new(&mut i2c, 0).start_measurement(),
+            Err(Error::InvalidArgument)
+        );
+        for (pmin, pmax) in [(0, 0), (40_000, -40_000), (-3_000_000, 3_000_000)] {
+            assert_eq!(
+                XgzpC::new(&mut i2c, pmin, pmax).start_measurement(),
+                Err(Error::InvalidArgument)
+            );
+        }
         i2c.done();
     }
 
@@ -826,7 +817,7 @@ mod tests {
     }
 
     #[test]
-    fn measure_full_blocking_and_async() {
+    fn measure_follows_pending_phase() {
         let mut ex = Vec::new();
         c_init(&mut ex);
         c_cycle(&mut ex);
@@ -834,7 +825,8 @@ mod tests {
         let mut x = XgzpC::new(&mut i2c, -40_000, 40_000);
         x.init().unwrap();
         let mut delay = RecordingDelay(0);
-        assert_eq!(x.measure_full(&mut delay).unwrap().pressure, 40_000);
+        let m = zigbee_sensor::blocking::measure(&mut x, &mut delay).unwrap();
+        assert_eq!(m.pressure, 40_000);
         assert_eq!(delay.0, 2 * PHASE_US);
         i2c.done();
 
@@ -845,7 +837,7 @@ mod tests {
         let mut x = asynch::XgzpC::new(&mut i2c, -40_000, 40_000);
         block_on(x.init()).unwrap();
         let mut delay = RecordingDelay(0);
-        let m = block_on(x.measure_full(&mut delay)).unwrap();
+        let m = block_on(zigbee_sensor::asynch::Sensor::measure(&mut x, &mut delay)).unwrap();
         assert_eq!((m.temperature, m.pressure), (2_600, 40_000));
         assert_eq!(delay.0, 2 * PHASE_US);
         i2c.done();

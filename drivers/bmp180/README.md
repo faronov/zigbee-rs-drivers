@@ -18,10 +18,9 @@ temperature. Both share registers, chip ID (0x55) and algorithm.
 
 `start_measurement()` starts the temperature conversion and returns 4.5 ms.
 The first `read_measurement()` captures the temperature, starts the
-pressure conversion and returns `Error::NotReady`; wait
-`pending_wait_us()` and call `read_measurement()` again for the result.
-The generic `measure()` helpers therefore stop at `NotReady`; use
-`measure_full(delay)` (blocking and async) in tools and tests.
+pressure conversion and returns `Error::Pending(wait_us)` with the pressure
+conversion time; wait that long and call `read_measurement()` again for the
+result. The `measure()` helpers of `zigbee-sensor` follow this phase.
 
 `read_measurement()` also returns `NotReady` without changing state while
 `ctrl_meas.sco` shows that a conversion is still running.

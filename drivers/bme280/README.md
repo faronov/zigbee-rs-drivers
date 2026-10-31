@@ -19,3 +19,5 @@ switches the part to SPI until the next power cycle. SDO selects the I2C
 address and is MISO in SPI mode. `init()` reads the calibration and is
 called automatically by the first `start_measurement()`. After
 `soft_reset()` wait `RESET_WAIT_US` (2 ms) before the next access.
+`set_config` returns `InvalidArgument` if the temperature oversampling is
+`Skip` (pressure and humidity need `t_fine`).
