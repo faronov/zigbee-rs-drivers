@@ -802,17 +802,17 @@ where
         finish(found, &mut self.parser)
     }
 
-    /// Send a set-ABC command (`Unsupported` if out of range); the reply is
+    /// Send a set-ABC command (`InvalidArgument` if out of range); the reply is
     /// an ack for [`cmd::SET_ABC`].
     pub fn set_abc(&mut self, abc: Abc) -> Result<WaitUs, Error<U::Error>> {
-        let c = set_abc_command(abc).ok_or(Error::Unsupported)?;
+        let c = set_abc_command(abc).ok_or(Error::InvalidArgument)?;
         self.send_command(&c)
     }
 
-    /// Send a calibrate command (`Unsupported` outside 400–1500 ppm); the
+    /// Send a calibrate command (`InvalidArgument` outside 400–1500 ppm); the
     /// reply is an ack for [`cmd::CALIBRATE`].
     pub fn calibrate(&mut self, ppm: u16) -> Result<WaitUs, Error<U::Error>> {
-        let c = calibrate_command(ppm).ok_or(Error::Unsupported)?;
+        let c = calibrate_command(ppm).ok_or(Error::InvalidArgument)?;
         self.send_command(&c)
     }
 }
@@ -864,14 +864,14 @@ impl<I2C: embedded_hal::i2c::I2c> Cm1106C<I2C> {
         Ok(check_i2c_reply(code, buf)?)
     }
 
-    /// Write set-ABC (`Unsupported` if out of range).
+    /// Write set-ABC (`InvalidArgument` if out of range).
     pub fn set_abc(&mut self, abc: Abc) -> Result<WaitUs, Error<I2C::Error>> {
-        self.send(&i2c_set_abc(abc).ok_or(Error::Unsupported)?)
+        self.send(&i2c_set_abc(abc).ok_or(Error::InvalidArgument)?)
     }
 
-    /// Write calibrate (`Unsupported` outside 400–1500 ppm).
+    /// Write calibrate (`InvalidArgument` outside 400–1500 ppm).
     pub fn calibrate(&mut self, ppm: u16) -> Result<WaitUs, Error<I2C::Error>> {
-        self.send(&i2c_calibrate(ppm).ok_or(Error::Unsupported)?)
+        self.send(&i2c_calibrate(ppm).ok_or(Error::InvalidArgument)?)
     }
 }
 
@@ -1054,13 +1054,13 @@ pub mod asynch {
 
         /// See [`super::Cm1106::set_abc`].
         pub async fn set_abc(&mut self, abc: Abc) -> Result<WaitUs, Error<U::Error>> {
-            let c = set_abc_command(abc).ok_or(Error::Unsupported)?;
+            let c = set_abc_command(abc).ok_or(Error::InvalidArgument)?;
             self.send_command(&c).await
         }
 
         /// See [`super::Cm1106::calibrate`].
         pub async fn calibrate(&mut self, ppm: u16) -> Result<WaitUs, Error<U::Error>> {
-            let c = calibrate_command(ppm).ok_or(Error::Unsupported)?;
+            let c = calibrate_command(ppm).ok_or(Error::InvalidArgument)?;
             self.send_command(&c).await
         }
     }
@@ -1113,13 +1113,13 @@ pub mod asynch {
 
         /// See [`super::Cm1106C::set_abc`].
         pub async fn set_abc(&mut self, abc: Abc) -> Result<WaitUs, Error<I2C::Error>> {
-            self.send(&i2c_set_abc(abc).ok_or(Error::Unsupported)?)
+            self.send(&i2c_set_abc(abc).ok_or(Error::InvalidArgument)?)
                 .await
         }
 
         /// See [`super::Cm1106C::calibrate`].
         pub async fn calibrate(&mut self, ppm: u16) -> Result<WaitUs, Error<I2C::Error>> {
-            self.send(&i2c_calibrate(ppm).ok_or(Error::Unsupported)?)
+            self.send(&i2c_calibrate(ppm).ok_or(Error::InvalidArgument)?)
                 .await
         }
     }
@@ -1436,7 +1436,7 @@ mod tests {
         };
         co2.set_abc(abc).unwrap();
         assert!(co2.read_reply(cmd::SET_ABC).unwrap().is_ack(cmd::SET_ABC));
-        assert_eq!(co2.calibrate(2000), Err(Error::Unsupported));
+        assert_eq!(co2.calibrate(2000), Err(Error::InvalidArgument));
         assert_eq!(&uart.tx[..4], read_co2_command().as_bytes());
         assert_eq!(&uart.tx[4..], set_abc_command(abc).unwrap().as_bytes());
     }
@@ -1476,7 +1476,7 @@ mod tests {
             base_ppm: 400,
         })
         .unwrap();
-        assert_eq!(co2.calibrate(300), Err(Error::Unsupported));
+        assert_eq!(co2.calibrate(300), Err(Error::InvalidArgument));
         i2c.done();
     }
 

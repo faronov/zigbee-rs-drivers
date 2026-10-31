@@ -44,6 +44,9 @@ pub struct Pm {
     pub pm10: u16,
 }
 
+/// Lower size bounds in nm of [`Measurement::counts_per_litre`].
+pub const COUNT_SIZES_NM: [u16; 6] = [300, 500, 1000, 2500, 5000, 10000];
+
 /// One decoded frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Measurement {
@@ -64,6 +67,13 @@ impl Readings for Measurement {
         f(Quantity::Pm1(u32::from(a.pm1_0) * 10));
         f(Quantity::Pm25(u32::from(a.pm2_5) * 10));
         f(Quantity::Pm10(u32::from(a.pm10) * 10));
+        // Per litre → per 0.1 L (= 0.01 #/cm³), truncated.
+        for (size_nm, count) in COUNT_SIZES_NM.into_iter().zip(self.counts_per_litre) {
+            f(Quantity::ParticlesAbove {
+                size_nm,
+                count: u32::from(count / 10),
+            });
+        }
     }
 }
 
@@ -256,8 +266,37 @@ mod tests {
         let mut seen = Vec::new();
         m.for_each(&mut |q| seen.push(q));
         assert_eq!(
-            seen,
-            vec![Quantity::Pm1(40), Quantity::Pm25(110), Quantity::Pm10(130)]
+            seen[..3],
+            [Quantity::Pm1(40), Quantity::Pm25(110), Quantity::Pm10(130)]
+        );
+        assert_eq!(
+            seen[3..],
+            [
+                Quantity::ParticlesAbove {
+                    size_nm: 300,
+                    count: 300
+                },
+                Quantity::ParticlesAbove {
+                    size_nm: 500,
+                    count: 90
+                },
+                Quantity::ParticlesAbove {
+                    size_nm: 1000,
+                    count: 20
+                },
+                Quantity::ParticlesAbove {
+                    size_nm: 2500,
+                    count: 3
+                },
+                Quantity::ParticlesAbove {
+                    size_nm: 5000,
+                    count: 0
+                },
+                Quantity::ParticlesAbove {
+                    size_nm: 10000,
+                    count: 0
+                },
+            ]
         );
         let mut bad = f;
         bad[12] ^= 1;

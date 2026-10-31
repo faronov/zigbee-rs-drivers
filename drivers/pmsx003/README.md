@@ -13,7 +13,7 @@ counts.
 | ID | none (PMSA003I: version byte in data 13) |
 | Timing | active: 2.3 s (stable) / 200–800 ms (fast); total response ≤ 10 s; stable ≥ 30 s after wake |
 | Current | ≤ 100 mA active, ≤ 200 µA standby, 4.5–5.5 V supply (fan) |
-| Output | `Pm1`, `Pm25`, `Pm10` (atmospheric) in 0.1 µg/m³; resolution 1 µg/m³ |
+| Output | `Pm1`, `Pm25`, `Pm10` (atmospheric) in 0.1 µg/m³, resolution 1 µg/m³; `ParticlesAbove` 0.3–10 µm in 0.01 #/cm³ |
 | Source | Plantower PMS5003 data manual V2.3; PMSA003I data manual V2.6 |
 | Status | mock-tested |
 
@@ -37,8 +37,9 @@ so `start_measurement` returns 0.
 ## Notes
 
 - `Measurement::standard` (CF=1) is meant for factory environments;
-  `atmospheric` is reported as quantities. Particle counts per 0.1 L and
-  data 13 are available on `Measurement` (no matching `Quantity`).
+  `atmospheric` is reported as `Pm1`/`Pm25`/`Pm10`. Particle counts per
+  0.1 L map 1:1 to `ParticlesAbove { size_nm: 300..=10000, count }`
+  (0.01 #/cm³). Data 13 is available on `Measurement` only.
 - Command acknowledgements and other non-28-byte frames are skipped by the
   parser.
 - PMS1003/PMS3003 (24-byte frames) are not supported.

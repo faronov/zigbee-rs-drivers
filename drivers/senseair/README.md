@@ -34,9 +34,11 @@ co2.read_ack()?;
 
 `Device` encodes every request (`read_input`, `read_holding`, `write`,
 `set_abc_period`, `calibrate`, `set_measurement_mode`, `set_pressure`,
-`start_single`, `read_state`, …). Requests the model does not implement
-(e.g. target calibration or `write_many` on the S8) or out-of-range
-arguments give `None`, which `send` reports as `Unsupported`.
+`start_single`, `read_state`, …) and returns `Result<Request,
+RequestError>`: requests the model does not implement (e.g. target
+calibration or `write_many` on the S8) give `Unsupported`, out-of-range
+arguments (register count, pressure 3000–13000, period, samples) give
+`InvalidArgument`; `send` reports them as the matching `Error`.
 
 Calibration: `send(device.clear_calibration_status())`, then
 `send(device.calibrate(Calibration::Background))`; on the S8 wait

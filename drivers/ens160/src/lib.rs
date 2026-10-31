@@ -224,9 +224,8 @@ pub struct Measurement {
     pub tvoc_ppb: u16,
     /// Equivalent CO2 in ppm (400..=65000).
     pub eco2_ppm: u16,
-    /// ENS161 only: AQI-S relative index 0..=500 (100 = typical average).
-    /// Not reported through [`Readings`] to avoid a second
-    /// `AirQualityIndex` quantity.
+    /// ENS161 only: AQI-S relative index 0..=500 (100 = typical average),
+    /// reported as [`Quantity::RelativeAirQualityIndex`].
     pub aqi_s: Option<u16>,
 }
 
@@ -235,6 +234,9 @@ impl Readings for Measurement {
         f(Quantity::Tvoc(u32::from(self.tvoc_ppb)));
         f(Quantity::Eco2(u32::from(self.eco2_ppm)));
         f(Quantity::AirQualityIndex(u16::from(self.aqi_uba)));
+        if let Some(aqi_s) = self.aqi_s {
+            f(Quantity::RelativeAirQualityIndex(aqi_s));
+        }
     }
 }
 
@@ -882,7 +884,7 @@ mod tests {
     use super::*;
     use embedded_hal_mock::eh1::i2c::{Mock as I2cMock, Transaction as I2cTx};
     use embedded_hal_mock::eh1::spi::{Mock as SpiMock, Transaction as SpiTx};
-    use std::vec;
+    use std::{vec, vec::Vec};
     use zigbee_sensor::blocking::{LowPower, Sensor};
 
     const A: u8 = PRIMARY_ADDRESS;
@@ -978,6 +980,9 @@ mod tests {
         let m = ens.read_measurement().unwrap();
         assert_eq!(m.aqi_s, Some(100));
         assert_eq!(m.eco2_ppm, 400);
+        let mut seen = Vec::new();
+        m.for_each(&mut |q| seen.push(q));
+        assert_eq!(seen.last(), Some(&Quantity::RelativeAirQualityIndex(100)));
         i2c.done();
     }
 
