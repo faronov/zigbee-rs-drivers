@@ -21,6 +21,10 @@
 //! sample (the sensor is free-running at 1 Hz). The SEN60 NACKs when no
 //! new sample is buffered, which also gives [`Error::NotReady`].
 //!
+//! SEN60 samples include the number concentrations. For the other variants,
+//! `with_number_concentration(true)` makes every second cycle read them
+//! (0x0316) instead of the measured values.
+//!
 //! Outputs the variant does not have, and values the sensor flags as
 //! unknown (0xFFFF for unsigned, 0x7FFF for signed values — e.g. NOx during
 //! its first 11 s, CO2 during its start-up, HCHO during its first 60 s),
@@ -190,7 +194,11 @@ impl Variant {
     }
 }
 
-/// Number concentrations in 0.1 particles/cm³ (`None` = unknown).
+/// Upper size bounds of the number-concentration bins, nm.
+pub const NC_SIZES_NM: [u16; 5] = [500, 1000, 2500, 4000, 10_000];
+
+/// Number concentrations in 0.01 particles/cm³ (sensor resolution
+/// 0.1 #/cm³; `None` = unknown).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct NumberConcentration {
     /// Particles 0.3–0.5 µm.
@@ -208,11 +216,23 @@ pub struct NumberConcentration {
 impl NumberConcentration {
     fn from_words(w: &[u16]) -> Self {
         Self {
-            pm0_5: unsigned(w[0]),
-            pm1_0: unsigned(w[1]),
-            pm2_5: unsigned(w[2]),
-            pm4_0: unsigned(w[3]),
-            pm10: unsigned(w[4]),
+            pm0_5: unsigned(w[0]).map(|v| v * 10),
+            pm1_0: unsigned(w[1]).map(|v| v * 10),
+            pm2_5: unsigned(w[2]).map(|v| v * 10),
+            pm4_0: unsigned(w[3]).map(|v| v * 10),
+            pm10: unsigned(w[4]).map(|v| v * 10),
+        }
+    }
+}
+
+impl Readings for NumberConcentration {
+    /// One [`Quantity::ParticlesBelow`] per known bin.
+    fn for_each(&self, f: &mut dyn FnMut(Quantity)) {
+        let counts = [self.pm0_5, self.pm1_0, self.pm2_5, self.pm4_0, self.pm10];
+        for (&size_nm, count) in NC_SIZES_NM.iter().zip(counts) {
+            if let Some(count) = count {
+                f(Quantity::ParticlesBelow { size_nm, count });
+            }
         }
     }
 }
@@ -240,8 +260,9 @@ pub struct Measurement {
     pub co2: Option<u32>,
     /// Formaldehyde, ppb (rounded from 0.1 ppb).
     pub formaldehyde: Option<u32>,
-    /// Number concentrations (SEN60 only; other variants:
-    /// `read_number_concentration`).
+    /// Number concentrations: every SEN60 sample; other variants in
+    /// every second sample with `with_number_concentration(true)` (that
+    /// sample has only this field), or via `read_number_concentration`.
     pub number_concentration: Option<NumberConcentration>,
 }
 
@@ -259,7 +280,10 @@ impl Readings for Measurement {
             self.co2.map(Quantity::Co2),
             self.formaldehyde.map(Quantity::Formaldehyde),
         ];
-        values.into_iter().flatten().for_each(f);
+        values.into_iter().flatten().for_each(&mut *f);
+        if let Some(n) = &self.number_concentration {
+            n.for_each(f);
+        }
     }
 }
 
@@ -392,6 +416,7 @@ fn require<E>(supported: bool) -> Result<(), Error<E>> {
 enum Pending {
     Nothing,
     Read,
+    Number,
 }
 
 macro_rules! constructors {
@@ -404,7 +429,19 @@ macro_rules! constructors {
                 variant,
                 running: false,
                 pending: Pending::Nothing,
+                number_concentration: false,
+                next_number: false,
             }
+        }
+
+        /// Alternate the [`Sensor`](zigbee_sensor::blocking::Sensor) cycle
+        /// between the measured values and the number concentrations
+        /// (SEN62 – SEN69C; default off). The number-concentration sample
+        /// has only [`Measurement::number_concentration`](crate::Measurement)
+        /// set. No effect on the SEN60, whose samples always include them.
+        pub const fn with_number_concentration(mut self, enable: bool) -> Self {
+            self.number_concentration = enable;
+            self
         }
 
         /// Configured variant (updated by `probe`).
@@ -535,18 +572,36 @@ macro_rules! methods {
             Ok(wait)
         }
 
-        /// Values requested by `request_measured_values`; [`Error::NotReady`]
-        /// if nothing was requested, the sensor is busy, or (SEN60) no new
-        /// sample is buffered.
+        /// Request the number concentrations (SEN62 – SEN69C); read them
+        /// after 20 ms with [`read_measured_values`](Self::read_measured_values).
+        pub $($async)* fn request_number_concentration(&mut self) -> Result<WaitUs, Error<I2C::Error>> {
+            require(!self.variant.is_sen60())?;
+            self.send(cmd::NUMBER_CONCENTRATION, &[], COMMAND_WAIT_US) $($aw)* ?;
+            self.pending = Pending::Number;
+            Ok(COMMAND_WAIT_US)
+        }
+
+        /// Values requested by `request_measured_values` (or, with only
+        /// `number_concentration` set, by `request_number_concentration`);
+        /// [`Error::NotReady`] if nothing was requested, the sensor is
+        /// busy, or (SEN60) no new sample is buffered.
         pub $($async)* fn read_measured_values(&mut self) -> Result<Measurement, Error<I2C::Error>> {
-            if self.pending != Pending::Read {
-                return Err(Error::NotReady);
-            }
-            let (_, n) = self.variant.read_command();
+            let n = match self.pending {
+                Pending::Nothing => return Err(Error::NotReady),
+                Pending::Read => self.variant.read_command().1,
+                Pending::Number => 5,
+            };
             let mut w = [0u16; 10];
             let result = self.bus.read(&mut w[..n]) $($aw)*;
-            self.pending = Pending::Nothing;
+            let pending = core::mem::replace(&mut self.pending, Pending::Nothing);
             result.map_err(nack_as_not_ready)?;
+            if pending == Pending::Number {
+                return Ok(Measurement {
+                    number_concentration: Some(NumberConcentration::from_words(&w[..5])),
+                    ..Measurement::default()
+                });
+            }
+            self.next_number = self.number_concentration && !self.variant.is_sen60();
             Ok(convert(&w[..n], self.variant))
         }
 
@@ -559,13 +614,13 @@ macro_rules! methods {
         }
 
         /// Set one temperature offset slot (volatile). An offset outside
-        /// ±163.83 °C or a slot above 4 gives [`Error::InvalidData`]
+        /// ±163.83 °C or a slot above 4 gives [`Error::InvalidArgument`]
         /// without bus traffic.
         pub $($async)* fn set_temperature_offset(&mut self, p: TemperatureOffset) -> Result<WaitUs, Error<I2C::Error>> {
             require(!self.variant.is_sen60())?;
-            let offset = i16::try_from(p.offset * 2).map_err(|_| Error::InvalidData)?;
+            let offset = i16::try_from(p.offset * 2).map_err(|_| Error::InvalidArgument)?;
             if p.slot > 4 {
-                return Err(Error::InvalidData);
+                return Err(Error::InvalidArgument);
             }
             let args = [offset as u16, p.slope as u16, p.time_constant_s, p.slot];
             self.send(cmd::TEMPERATURE_OFFSET, &args, COMMAND_WAIT_US) $($aw)*
@@ -663,11 +718,11 @@ macro_rules! methods {
 
         /// Set the ambient pressure for CO2 compensation (700–1200 hPa,
         /// default 1013; overrides the altitude; volatile). Out of range
-        /// gives [`Error::InvalidData`] without bus traffic.
+        /// gives [`Error::InvalidArgument`] without bus traffic.
         pub $($async)* fn set_ambient_pressure(&mut self, hpa: u16) -> Result<WaitUs, Error<I2C::Error>> {
             require(self.variant.has_co2())?;
             if !(700..=1200).contains(&hpa) {
-                return Err(Error::InvalidData);
+                return Err(Error::InvalidArgument);
             }
             self.send(cmd::AMBIENT_PRESSURE, &[hpa], COMMAND_WAIT_US) $($aw)*
         }
@@ -680,11 +735,11 @@ macro_rules! methods {
         }
 
         /// Set the sensor altitude (0–3000 m, default 0; idle only;
-        /// volatile). Out of range gives [`Error::InvalidData`].
+        /// volatile). Out of range gives [`Error::InvalidArgument`].
         pub $($async)* fn set_sensor_altitude(&mut self, meters: u16) -> Result<WaitUs, Error<I2C::Error>> {
             require(self.variant.has_co2())?;
             if meters > 3000 {
-                return Err(Error::InvalidData);
+                return Err(Error::InvalidArgument);
             }
             self.send(cmd::ALTITUDE, &[meters], COMMAND_WAIT_US) $($aw)*
         }
@@ -730,9 +785,14 @@ macro_rules! methods {
 
         $($async)* fn start(&mut self) -> Result<WaitUs, Error<I2C::Error>> {
             if self.running {
+                if self.next_number {
+                    self.next_number = false;
+                    return self.request_number_concentration() $($aw)*;
+                }
                 return self.request_measured_values() $($aw)*;
             }
             self.start_continuous_measurement() $($aw)* ?;
+            self.next_number = false;
             Ok(FIRST_SAMPLE_US)
         }
     };
@@ -768,6 +828,8 @@ pub struct Sen6x<I2C> {
     variant: Variant,
     running: bool,
     pending: Pending,
+    number_concentration: bool,
+    next_number: bool,
 }
 
 impl<I2C> Sen6x<I2C> {
@@ -804,6 +866,8 @@ pub mod asynch {
         variant: Variant,
         running: bool,
         pending: Pending,
+        number_concentration: bool,
+        next_number: bool,
     }
 
     impl<I2C> Sen6x<I2C> {
@@ -866,6 +930,9 @@ mod tests {
             nack(Transaction::read(ADDRESS, vec![0; 27])),
             Transaction::write(ADDRESS, vec![0x03, 0x00]),
             Transaction::read(ADDRESS, words(&SEN66)),
+            Transaction::write(ADDRESS, vec![0x03, 0x16]),
+            Transaction::read(ADDRESS, words(&[100, 200, 300, 400, 0xFFFF])),
+            Transaction::write(ADDRESS, vec![0x03, 0x00]),
             Transaction::write(ADDRESS, vec![0x02, 0x02]),
             Transaction::read(ADDRESS, words(&[0x0000])),
             Transaction::write(ADDRESS, vec![0x01, 0x04]),
@@ -873,7 +940,7 @@ mod tests {
         let mut i2c = Mock::new(&expectations);
         let mut delay =
             CheckedDelay::new(&[D::blocking_delay_us(20_000), D::blocking_delay_us(20_000)]);
-        let mut sen = Sen6x::new(&mut i2c, Variant::Sen62);
+        let mut sen = Sen6x::new(&mut i2c, Variant::Sen62).with_number_concentration(true);
         assert_eq!(sen.probe(&mut delay).unwrap(), Variant::Sen66);
         assert_eq!(sen.start_measurement().unwrap(), 1_100_000);
         assert_eq!(sen.read_measurement(), Err(Error::NotReady));
@@ -901,6 +968,34 @@ mod tests {
         assert_eq!(seen.len(), 9);
         assert_eq!(seen[0], Quantity::Temperature(2255));
         assert_eq!(seen[8], Quantity::Co2(612));
+        // Number concentrations alternate with the measured values.
+        assert_eq!(sen.start_measurement().unwrap(), 20_000);
+        let m = sen.read_measurement().unwrap();
+        assert_eq!((m.pm2_5, m.temperature), (None, None));
+        seen.clear();
+        m.for_each(&mut |q| seen.push(q));
+        assert_eq!(
+            seen,
+            [
+                Quantity::ParticlesBelow {
+                    size_nm: 500,
+                    count: 1000
+                },
+                Quantity::ParticlesBelow {
+                    size_nm: 1000,
+                    count: 2000
+                },
+                Quantity::ParticlesBelow {
+                    size_nm: 2500,
+                    count: 3000
+                },
+                Quantity::ParticlesBelow {
+                    size_nm: 4000,
+                    count: 4000
+                },
+            ]
+        );
+        sen.start_measurement().unwrap();
         assert!(!sen.read_data_ready(&mut delay).unwrap());
         assert_eq!(sen.stop_measurement().unwrap(), 1_400_000);
         delay.done();
@@ -946,12 +1041,22 @@ mod tests {
         assert_eq!(
             m.number_concentration,
             Some(NumberConcentration {
-                pm0_5: Some(100),
-                pm1_0: Some(200),
-                pm2_5: Some(300),
-                pm4_0: Some(400),
+                pm0_5: Some(1000),
+                pm1_0: Some(2000),
+                pm2_5: Some(3000),
+                pm4_0: Some(4000),
                 pm10: None,
             })
+        );
+        let mut seen = Vec::new();
+        m.for_each(&mut |q| seen.push(q));
+        assert_eq!(seen.len(), 8);
+        assert_eq!(
+            seen[7],
+            Quantity::ParticlesBelow {
+                size_nm: 4000,
+                count: 4000
+            }
         );
         let serial = sen.serial_number(&mut delay).unwrap();
         assert_eq!(&serial[..13], b"001234ABCDEF\0");
@@ -1071,14 +1176,14 @@ mod tests {
         };
         assert_eq!(
             sen.set_temperature_offset(TemperatureOffset { slot: 5, ..offset }),
-            Err(Error::InvalidData)
+            Err(Error::InvalidArgument)
         );
         assert_eq!(
             sen.set_temperature_offset(TemperatureOffset {
                 offset: 20_000,
                 ..offset
             }),
-            Err(Error::InvalidData)
+            Err(Error::InvalidArgument)
         );
         sen.set_temperature_offset(offset).unwrap();
         sen.set_temperature_acceleration(TemperatureAcceleration {
@@ -1088,8 +1193,8 @@ mod tests {
             t2: 300,
         })
         .unwrap();
-        assert_eq!(sen.set_ambient_pressure(600), Err(Error::InvalidData));
-        assert_eq!(sen.set_sensor_altitude(3001), Err(Error::InvalidData));
+        assert_eq!(sen.set_ambient_pressure(600), Err(Error::InvalidArgument));
+        assert_eq!(sen.set_sensor_altitude(3001), Err(Error::InvalidArgument));
         sen.set_ambient_pressure(1013).unwrap();
         assert_eq!(sen.start_forced_recalibration(420).unwrap(), 500_000);
         assert_eq!(sen.read_forced_recalibration().unwrap(), -25);
@@ -1097,7 +1202,7 @@ mod tests {
         assert_eq!(sen.read_forced_recalibration(), Err(Error::InvalidData));
         sen.set_automatic_self_calibration(false).unwrap();
         let n = sen.read_number_concentration(&mut delay).unwrap();
-        assert_eq!((n.pm0_5, n.pm10), (Some(100), Some(500)));
+        assert_eq!((n.pm0_5, n.pm10), (Some(1000), Some(5000)));
         let status = sen.read_and_clear_device_status(&mut delay).unwrap();
         assert_eq!(status, STATUS_SPEED | STATUS_CO2_2);
         assert_eq!(sen.firmware_version(&mut delay).unwrap(), (4, 2));

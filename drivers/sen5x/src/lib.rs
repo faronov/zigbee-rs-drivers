@@ -12,6 +12,11 @@
 //! starts send `Read Measured Values` and return 20 ms; the read then
 //! returns the latest sample (the sensor is free-running at 1 Hz).
 //!
+//! With `with_number_concentration(true)` (and [`Mode::Full`]), every
+//! second cycle sends `Read Measured PM Values` (0x0413) instead: that
+//! sample has PM mass, number concentrations and typical particle size but
+//! no RH/T/VOC/NOx. The SEN50, which has PM only, always uses it.
+//!
 //! Outputs the variant does not have, and values the sensor flags as
 //! unknown (0xFFFF for PM, 0x7FFF for the signed values — e.g. PM in
 //! RHT/gas-only mode, or the NOx index during its start-up), are `None`.
@@ -20,6 +25,8 @@
 //! `LowPower` implementation; switch the 5 V supply to save power.
 //!
 //! Reference: Sensirion "Datasheet SEN5x", version 2 (March 2022, D1).
+//! `Read Measured PM Values` (0x0413) is not in that datasheet; its layout
+//! follows Sensirion's `embedded-i2c-sen5x` driver.
 
 #![no_std]
 
@@ -34,6 +41,7 @@ mod cmd {
     pub const STOP_MEASUREMENT: u16 = 0x0104;
     pub const READ_DATA_READY: u16 = 0x0202;
     pub const READ_MEASURED_VALUES: u16 = 0x03C4;
+    pub const READ_MEASURED_PM_VALUES: u16 = 0x0413;
     pub const TEMPERATURE_COMPENSATION: u16 = 0x60B2;
     pub const WARM_START: u16 = 0x60C6;
     pub const VOC_TUNING: u16 = 0x60D0;
@@ -125,6 +133,41 @@ pub struct Measurement {
     pub voc_index: Option<u16>,
     /// NOx index (1–500).
     pub nox_index: Option<u16>,
+    /// Number concentrations (`Read Measured PM Values` samples only).
+    pub number_concentration: Option<NumberConcentration>,
+    /// Typical particle size, nm (`Read Measured PM Values` samples only).
+    pub typical_particle_size: Option<u32>,
+}
+
+/// Upper size bounds of the number-concentration bins, nm.
+pub const NC_SIZES_NM: [u16; 5] = [500, 1000, 2500, 4000, 10_000];
+
+/// Number concentrations in 0.01 particles/cm³ (sensor resolution
+/// 0.1 #/cm³; `None` = unknown).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct NumberConcentration {
+    /// Particles 0.3–0.5 µm.
+    pub pm0_5: Option<u32>,
+    /// Particles 0.3–1.0 µm.
+    pub pm1_0: Option<u32>,
+    /// Particles 0.3–2.5 µm.
+    pub pm2_5: Option<u32>,
+    /// Particles 0.3–4.0 µm.
+    pub pm4_0: Option<u32>,
+    /// Particles 0.3–10 µm.
+    pub pm10: Option<u32>,
+}
+
+impl Readings for NumberConcentration {
+    /// One [`Quantity::ParticlesBelow`] per known bin.
+    fn for_each(&self, f: &mut dyn FnMut(Quantity)) {
+        let counts = [self.pm0_5, self.pm1_0, self.pm2_5, self.pm4_0, self.pm10];
+        for (&size_nm, count) in NC_SIZES_NM.iter().zip(counts) {
+            if let Some(count) = count {
+                f(Quantity::ParticlesBelow { size_nm, count });
+            }
+        }
+    }
 }
 
 impl Readings for Measurement {
@@ -139,7 +182,13 @@ impl Readings for Measurement {
             self.voc_index.map(Quantity::VocIndex),
             self.nox_index.map(Quantity::NoxIndex),
         ];
-        values.into_iter().flatten().for_each(f);
+        values.into_iter().flatten().for_each(&mut *f);
+        if let Some(n) = &self.number_concentration {
+            n.for_each(f);
+        }
+        if let Some(size) = self.typical_particle_size {
+            f(Quantity::TypicalParticleSize(size));
+        }
     }
 }
 
@@ -251,6 +300,28 @@ fn convert(w: &[u16; 8], variant: Variant) -> Measurement {
         temperature: signed(w[5]).filter(|_| rht_voc).map(|v| i32::from(v) / 2),
         voc_index: index(w[6]).filter(|_| rht_voc),
         nox_index: index(w[7]).filter(|_| variant.has_nox()),
+        ..Measurement::default()
+    }
+}
+
+/// `Read Measured PM Values`: mass, number concentration (0.1 #/cm³) and
+/// typical particle size (0.001 µm = nm).
+fn convert_pm(w: &[u16; 10]) -> Measurement {
+    let number = |raw: u16| mass(raw).map(|v| v * 10);
+    Measurement {
+        pm1_0: mass(w[0]),
+        pm2_5: mass(w[1]),
+        pm4_0: mass(w[2]),
+        pm10: mass(w[3]),
+        number_concentration: Some(NumberConcentration {
+            pm0_5: number(w[4]),
+            pm1_0: number(w[5]),
+            pm2_5: number(w[6]),
+            pm4_0: number(w[7]),
+            pm10: number(w[8]),
+        }),
+        typical_particle_size: mass(w[9]),
+        ..Measurement::default()
     }
 }
 
@@ -272,6 +343,7 @@ fn variant_from_name(name: &[u8]) -> Option<Variant> {
 enum Pending {
     Nothing,
     Read,
+    ReadPm,
 }
 
 macro_rules! constructors {
@@ -284,7 +356,18 @@ macro_rules! constructors {
                 mode: Mode::Full,
                 running: false,
                 pending: Pending::Nothing,
+                number_concentration: false,
+                next_pm: false,
             }
+        }
+
+        /// Let the [`Sensor`](zigbee_sensor::blocking::Sensor) cycle read
+        /// number concentrations and typical particle size in
+        /// [`Mode::Full`] (default off): every second sample on the
+        /// SEN54/SEN55 (without RH/T/VOC/NOx), every sample on the SEN50.
+        pub const fn with_number_concentration(mut self, enable: bool) -> Self {
+            self.number_concentration = enable;
+            self
         }
 
         /// Mode started by `start_measurement` (default [`Mode::Full`]).
@@ -401,22 +484,41 @@ macro_rules! methods {
             Ok(COMMAND_WAIT_US)
         }
 
-        /// Values requested by `request_measured_values`; [`Error::NotReady`]
-        /// if nothing was requested or the sensor is still busy.
+        /// Request PM mass, number concentrations and typical particle
+        /// size; read them after 20 ms with
+        /// [`read_measured_values`](Self::read_measured_values).
+        pub $($async)* fn request_measured_pm_values(&mut self) -> Result<WaitUs, Error<I2C::Error>> {
+            self.send(cmd::READ_MEASURED_PM_VALUES, &[], COMMAND_WAIT_US) $($aw)* ?;
+            self.pending = Pending::ReadPm;
+            Ok(COMMAND_WAIT_US)
+        }
+
+        /// Values requested by `request_measured_values` or
+        /// `request_measured_pm_values`; [`Error::NotReady`] if nothing was
+        /// requested or the sensor is still busy.
         pub $($async)* fn read_measured_values(&mut self) -> Result<Measurement, Error<I2C::Error>> {
-            if self.pending != Pending::Read {
-                return Err(Error::NotReady);
+            match self.pending {
+                Pending::Nothing => Err(Error::NotReady),
+                Pending::Read => {
+                    let mut w = [0u16; 8];
+                    self.bus.read(&mut w) $($aw)* .map_err(nack_as_not_ready)?;
+                    self.pending = Pending::Nothing;
+                    self.next_pm = self.number_concentration && self.mode == Mode::Full;
+                    Ok(convert(&w, self.variant))
+                }
+                Pending::ReadPm => {
+                    let mut w = [0u16; 10];
+                    self.bus.read(&mut w) $($aw)* .map_err(nack_as_not_ready)?;
+                    self.pending = Pending::Nothing;
+                    Ok(convert_pm(&w))
+                }
             }
-            let mut w = [0u16; 8];
-            self.bus.read(&mut w) $($aw)* .map_err(nack_as_not_ready)?;
-            self.pending = Pending::Nothing;
-            Ok(convert(&w, self.variant))
         }
 
         /// Set the temperature compensation (volatile). An offset outside
-        /// ±163.83 °C gives [`Error::InvalidData`] without bus traffic.
+        /// ±163.83 °C gives [`Error::InvalidArgument`] without bus traffic.
         pub $($async)* fn set_temperature_compensation(&mut self, p: TemperatureCompensation) -> Result<WaitUs, Error<I2C::Error>> {
-            let offset = i16::try_from(p.offset * 2).map_err(|_| Error::InvalidData)?;
+            let offset = i16::try_from(p.offset * 2).map_err(|_| Error::InvalidArgument)?;
             let args = [offset as u16, p.slope as u16, p.time_constant_s];
             self.send(cmd::TEMPERATURE_COMPENSATION, &args, COMMAND_WAIT_US) $($aw)*
         }
@@ -513,8 +615,15 @@ macro_rules! methods {
 
         $($async)* fn start(&mut self) -> Result<WaitUs, Error<I2C::Error>> {
             if self.running {
+                let pm_only = self.number_concentration
+                    && self.mode == Mode::Full
+                    && !self.variant.has_rht_voc();
+                if core::mem::take(&mut self.next_pm) || pm_only {
+                    return self.request_measured_pm_values() $($aw)*;
+                }
                 return self.request_measured_values() $($aw)*;
             }
+            self.next_pm = false;
             match self.mode {
                 Mode::Full => self.start_continuous_measurement() $($aw)* ?,
                 Mode::RhtGasOnly => self.start_rht_gas_only_measurement() $($aw)* ?,
@@ -555,6 +664,8 @@ pub struct Sen5x<I2C> {
     mode: Mode,
     running: bool,
     pending: Pending,
+    number_concentration: bool,
+    next_pm: bool,
 }
 
 impl<I2C> Sen5x<I2C> {
@@ -576,7 +687,7 @@ pub mod asynch {
     use super::{
         ADDRESS, AlgorithmTuning, COMMAND_WAIT_US, Measurement, Mode, Pending, RESET_WAIT_US,
         RhtAcceleration, SAMPLE_INTERVAL_US, START_WAIT_US, STOP_WAIT_US, TemperatureCompensation,
-        Variant, cmd, convert, u32_from_words, variant_from_name,
+        Variant, cmd, convert, convert_pm, u32_from_words, variant_from_name,
     };
     use zigbee_sensirion_common::asynch::Interface;
     use zigbee_sensirion_common::{nack_as_not_ready, words_to_bytes};
@@ -590,6 +701,8 @@ pub mod asynch {
         mode: Mode,
         running: bool,
         pending: Pending,
+        number_concentration: bool,
+        next_pm: bool,
     }
 
     impl<I2C> Sen5x<I2C> {
@@ -623,6 +736,8 @@ mod tests {
     // PM 1.2/2.5/3.1/4.0 µg/m³, 45.20 %RH, 22.55 °C (4510/200), VOC 100.0,
     // NOx 1.0.
     const SAMPLE: [u16; 8] = [12, 25, 31, 40, 4520, 4510, 1000, 10];
+    // Same PM; NC 10/20/30/unknown/50 #/cm³; typical size 0.45 µm.
+    const PM_SAMPLE: [u16; 10] = [12, 25, 31, 40, 100, 200, 300, 0xFFFF, 500, 450];
 
     fn words(w: &[u16]) -> Vec<u8> {
         w.iter().flat_map(|&x| encode_word(x)).collect()
@@ -652,11 +767,14 @@ mod tests {
             nack(Transaction::read(ADDRESS, vec![0; 24])),
             Transaction::write(ADDRESS, vec![0x03, 0xC4]),
             Transaction::read(ADDRESS, words(&SAMPLE)),
+            Transaction::write(ADDRESS, vec![0x04, 0x13]),
+            Transaction::read(ADDRESS, words(&PM_SAMPLE)),
+            Transaction::write(ADDRESS, vec![0x03, 0xC4]),
             Transaction::write(ADDRESS, vec![0x01, 0x04]),
         ];
         let mut i2c = Mock::new(&expectations);
         let mut delay = CheckedDelay::new(&[D::blocking_delay_us(20_000)]);
-        let mut sen = Sen5x::new(&mut i2c, Variant::Sen50);
+        let mut sen = Sen5x::new(&mut i2c, Variant::Sen50).with_number_concentration(true);
         assert_eq!(sen.probe(&mut delay).unwrap(), Variant::Sen55);
         assert_eq!(sen.start_measurement().unwrap(), 1_000_000);
         assert_eq!(sen.read_measurement(), Err(Error::NotReady));
@@ -675,6 +793,7 @@ mod tests {
                 temperature: Some(2255),
                 voc_index: Some(100),
                 nox_index: Some(1),
+                ..Measurement::default()
             }
         );
         let mut seen = Vec::new();
@@ -682,6 +801,35 @@ mod tests {
         assert_eq!(seen.len(), 8);
         assert_eq!(seen[0], Quantity::Temperature(2255));
         assert_eq!(seen[7], Quantity::NoxIndex(1));
+        // Every second sample: PM values with number concentrations.
+        assert_eq!(sen.start_measurement().unwrap(), 20_000);
+        let m = sen.read_measurement().unwrap();
+        assert_eq!((m.pm2_5, m.temperature), (Some(25), None));
+        seen.clear();
+        m.for_each(&mut |q| seen.push(q));
+        assert_eq!(
+            seen[4..],
+            [
+                Quantity::ParticlesBelow {
+                    size_nm: 500,
+                    count: 1000
+                },
+                Quantity::ParticlesBelow {
+                    size_nm: 1000,
+                    count: 2000
+                },
+                Quantity::ParticlesBelow {
+                    size_nm: 2500,
+                    count: 3000
+                },
+                Quantity::ParticlesBelow {
+                    size_nm: 10_000,
+                    count: 5000
+                },
+                Quantity::TypicalParticleSize(450),
+            ]
+        );
+        sen.start_measurement().unwrap();
         assert_eq!(sen.stop_measurement().unwrap(), 200_000);
         delay.done();
         i2c.done();
@@ -737,6 +885,22 @@ mod tests {
         let mut sen = Sen5x::new(&mut i2c, Variant::Sen50).with_mode(Mode::RhtGasOnly);
         assert_eq!(sen.start_measurement(), Err(Error::Unsupported));
         i2c.done();
+
+        // SEN50 with number concentrations: always `Read Measured PM Values`.
+        let expectations = [
+            Transaction::write(ADDRESS, vec![0x00, 0x21]),
+            Transaction::write(ADDRESS, vec![0x04, 0x13]),
+            Transaction::read(ADDRESS, words(&PM_SAMPLE)),
+            Transaction::write(ADDRESS, vec![0x04, 0x13]),
+        ];
+        let mut i2c = Mock::new(&expectations);
+        let mut sen = Sen5x::new(&mut i2c, Variant::Sen50).with_number_concentration(true);
+        sen.start_measurement().unwrap();
+        sen.start_measurement().unwrap();
+        let m = sen.read_measurement().unwrap();
+        assert_eq!(m.typical_particle_size, Some(450));
+        sen.start_measurement().unwrap();
+        i2c.done();
     }
 
     #[test]
@@ -781,7 +945,7 @@ mod tests {
                 offset: 20_000,
                 ..comp
             }),
-            Err(Error::InvalidData)
+            Err(Error::InvalidArgument)
         );
         sen.set_temperature_compensation(comp).unwrap();
         assert_eq!(sen.temperature_compensation(&mut delay).unwrap(), comp);

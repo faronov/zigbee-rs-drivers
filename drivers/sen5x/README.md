@@ -11,6 +11,7 @@ Driver for the Sensirion SEN50, SEN54 and SEN55 environmental sensor nodes over 
 The driver supports:
 
 - start and stop, RHT/gas-only mode (SEN54/55), data-ready flag
+- number concentrations and typical particle size (`Read Measured PM Values`)
 - temperature compensation (offset, slope, time constant), warm start and RH/T acceleration
 - VOC and NOx tuning, VOC state backup and restore
 - fan cleaning and its interval
@@ -23,9 +24,9 @@ The driver supports:
 |---|---|
 | Address | 0x69 |
 | Conversion | free-running at 1 s; `Read Measured Values` takes 20 ms; start 50 ms, stop 200 ms, reset 100 ms |
-| Output | PM in 0.1 µg/m³; RH 0.01 %RH; T 0.01 °C (sensor resolution 0.005 °C, truncated); VOC and NOx index 1–500 |
+| Output | PM in 0.1 µg/m³; number concentration in 0.01 #/cm³ (sensor resolution 0.1 #/cm³) as `Quantity::ParticlesBelow` (500/1000/2500/4000/10 000 nm bins); typical particle size in nm; RH 0.01 %RH; T 0.01 °C (sensor resolution 0.005 °C, truncated); VOC and NOx index 1–500 |
 | Current | measuring 63–70 mA (100 mA peak); RHT/gas-only 6.5–6.8 mA; idle 0.7 mA (SEN55 2.6–3.8 mA); **no sleep mode** |
-| Source | Sensirion Datasheet SEN5x, version 2 (March 2022, D1) |
+| Source | Sensirion Datasheet SEN5x, version 2 (March 2022, D1). `Read Measured PM Values` (0x0413) is not in the datasheet; its layout follows Sensirion's `embedded-i2c-sen5x` driver. |
 | Status | mock-tested |
 
 ## Wiring
@@ -38,6 +39,8 @@ The driver supports:
 ## Measurement cycle
 
 `start_measurement` starts the configured `Mode` on its first call and returns 1 s; the read that follows is `NotReady`. Each later call requests the latest values and returns 20 ms.
+
+Number concentrations and typical particle size come from a separate command. With `with_number_concentration(true)` in `Mode::Full`, every second cycle on the SEN54/SEN55 reads them, together with PM mass but without RH/T/VOC/NOx. The SEN50 reads them every cycle, because it has PM only. The option is off by default.
 
 ## Power
 
