@@ -26,9 +26,9 @@
 //! [`read_measurement`](zigbee_sensor::blocking::Sensor::read_measurement)
 //! after [`start_measurement`](zigbee_sensor::blocking::Sensor::start_measurement)
 //! reads the humidity, triggers the temperature conversion and returns
-//! [`Error::NotReady`]; wait [`Si70xx::pending_wait_us`] and call it again.
-//! [`zigbee_sensor::blocking::measure`] therefore only works on the
-//! Silicon Labs variants; use [`Si70xx::measure`] for any variant.
+//! [`Error::Pending`] with the temperature conversion time; wait that long
+//! and call it again. [`zigbee_sensor::blocking::measure`] and
+//! [`zigbee_sensor::asynch::Sensor::measure`] follow this automatically.
 //!
 //! ```ignore
 //! let mut si = Si70xx::new(i2c, Variant::Si7021);
@@ -57,6 +57,7 @@ const CMD_READ_HEATER: u8 = 0x11;
 const CMD_EID_FIRST: [u8; 2] = [0xFA, 0x0F];
 const CMD_EID_SECOND: [u8; 2] = [0xFC, 0xC9];
 const CMD_FIRMWARE: [u8; 2] = [0x84, 0xB8];
+const MAX_HEATER_LEVEL: u8 = 15;
 
 /// Soft reset time (Si7021 t_RST max 15 ms; HTU21D / SHT2x < 15 ms).
 pub const RESET_WAIT_US: WaitUs = 15_000;
@@ -320,12 +321,6 @@ macro_rules! constructors {
             self.variant
         }
 
-        /// Wait before calling `read_measurement` again after it returned
-        /// `Error::NotReady` (HTU21D / SHT2x temperature phase).
-        pub const fn pending_wait_us(&self) -> WaitUs {
-            self.variant.temperature_wait_us(self.resolution)
-        }
-
         fn step_after_humidity(&self) -> Step {
             if self.variant.is_silabs() {
                 Step::PreviousTemperature
@@ -409,14 +404,18 @@ impl<I2C: embedded_hal::i2c::I2c> Si70xx<I2C> {
         self.write_user_register(reg.with_heater(on))
     }
 
-    /// Set the heater current, 0 (3.09 mA) ..= 15 (94.20 mA). Silicon Labs only.
+    /// Set the heater current, 0 (3.09 mA) ..= 15 (94.20 mA). Silicon Labs
+    /// only; a level above 15 is [`Error::InvalidArgument`].
     pub fn set_heater_level(&mut self, level: u8) -> Result<(), Error<I2C::Error>> {
         if !self.variant.is_silabs() {
             return Err(Error::Unsupported);
         }
+        if level > MAX_HEATER_LEVEL {
+            return Err(Error::InvalidArgument);
+        }
         let mut buf = [0u8; 1];
         self.write_read(&[CMD_READ_HEATER], &mut buf)?;
-        self.write(&[CMD_WRITE_HEATER, (buf[0] & 0xF0) | (level & 0x0F)])
+        self.write(&[CMD_WRITE_HEATER, (buf[0] & 0xF0) | level])
     }
 
     /// Read the 64-bit electronic ID.
@@ -449,23 +448,6 @@ impl<I2C: embedded_hal::i2c::I2c> Si70xx<I2C> {
         self.write_read(&CMD_FIRMWARE, &mut buf)?;
         Ok(buf[0])
     }
-
-    /// Full measurement on every variant, including the second conversion
-    /// on HTU21D / SHT2x.
-    pub fn measure<D: embedded_hal::delay::DelayNs>(
-        &mut self,
-        delay: &mut D,
-    ) -> Result<Measurement, Error<I2C::Error>> {
-        use zigbee_sensor::blocking::Sensor as _;
-        delay.delay_us(self.start_measurement()?);
-        match self.read_measurement() {
-            Err(Error::NotReady) => {
-                delay.delay_us(self.pending_wait_us());
-                self.read_measurement()
-            }
-            other => other,
-        }
-    }
 }
 
 impl<I2C: embedded_hal::i2c::I2c> zigbee_sensor::blocking::Sensor for Si70xx<I2C> {
@@ -479,7 +461,7 @@ impl<I2C: embedded_hal::i2c::I2c> zigbee_sensor::blocking::Sensor for Si70xx<I2C
     }
 
     /// Returns [`Error::Bus`] (NACK) while converting, and
-    /// [`Error::NotReady`] after starting the HTU21D / SHT2x temperature
+    /// [`Error::Pending`] after starting the HTU21D / SHT2x temperature
     /// conversion (see the crate docs).
     fn read_measurement(&mut self) -> Result<Measurement, Error<I2C::Error>> {
         let mut frame = [0u8; 3];
@@ -510,7 +492,9 @@ impl<I2C: embedded_hal::i2c::I2c> zigbee_sensor::blocking::Sensor for Si70xx<I2C
             Step::MeasureTemperature => {
                 self.write(&[CMD_MEASURE_T])?;
                 self.pending_humidity = Some(rh);
-                Err(Error::NotReady)
+                Err(Error::Pending(
+                    self.variant.temperature_wait_us(self.resolution),
+                ))
             }
         }
     }
@@ -521,8 +505,9 @@ pub mod asynch {
     use super::{
         CMD_EID_FIRST, CMD_EID_SECOND, CMD_FIRMWARE, CMD_MEASURE_RH, CMD_MEASURE_T,
         CMD_READ_HEATER, CMD_READ_PREVIOUS_T, CMD_READ_USER, CMD_RESET, CMD_WRITE_HEATER,
-        CMD_WRITE_USER, DEFAULT_ADDRESS, ElectronicId, Measurement, RESET_WAIT_US, Resolution,
-        Step, UserRegister, Variant, convert_humidity, convert_temperature, decode_word,
+        CMD_WRITE_USER, DEFAULT_ADDRESS, ElectronicId, MAX_HEATER_LEVEL, Measurement,
+        RESET_WAIT_US, Resolution, Step, UserRegister, Variant, convert_humidity,
+        convert_temperature, decode_word,
     };
     use embedded_hal_async::i2c::I2c;
     use zigbee_sensor::{Error, WaitUs};
@@ -605,9 +590,12 @@ pub mod asynch {
             if !self.variant.is_silabs() {
                 return Err(Error::Unsupported);
             }
+            if level > MAX_HEATER_LEVEL {
+                return Err(Error::InvalidArgument);
+            }
             let mut buf = [0u8; 1];
             self.write_read(&[CMD_READ_HEATER], &mut buf).await?;
-            self.write(&[CMD_WRITE_HEATER, (buf[0] & 0xF0) | (level & 0x0F)])
+            self.write(&[CMD_WRITE_HEATER, (buf[0] & 0xF0) | level])
                 .await
         }
 
@@ -638,23 +626,6 @@ pub mod asynch {
             let mut buf = [0u8; 1];
             self.write_read(&CMD_FIRMWARE, &mut buf).await?;
             Ok(buf[0])
-        }
-
-        /// See [`super::Si70xx::measure`].
-        pub async fn measure_all<D: embedded_hal_async::delay::DelayNs>(
-            &mut self,
-            delay: &mut D,
-        ) -> Result<Measurement, Error<I2C::Error>> {
-            use zigbee_sensor::asynch::Sensor as _;
-            let wait = self.start_measurement().await?;
-            delay.delay_us(wait).await;
-            match self.read_measurement().await {
-                Err(Error::NotReady) => {
-                    delay.delay_us(self.pending_wait_us()).await;
-                    self.read_measurement().await
-                }
-                other => other,
-            }
         }
     }
 
@@ -699,7 +670,9 @@ pub mod asynch {
                 Step::MeasureTemperature => {
                     self.write(&[CMD_MEASURE_T]).await?;
                     self.pending_humidity = Some(rh);
-                    Err(Error::NotReady)
+                    Err(Error::Pending(
+                        self.variant.temperature_wait_us(self.resolution),
+                    ))
                 }
             }
         }
@@ -788,8 +761,7 @@ mod tests {
         let mut i2c = Mock::new(&expectations);
         let mut htu = Si70xx::new(&mut i2c, Variant::Htu21d);
         assert_eq!(htu.start_measurement().unwrap(), 16_000);
-        assert_eq!(htu.read_measurement(), Err(Error::NotReady));
-        assert_eq!(htu.pending_wait_us(), 50_000);
+        assert_eq!(htu.read_measurement(), Err(Error::Pending(50_000)));
         assert_eq!(
             htu.read_measurement().unwrap(),
             Measurement {
@@ -822,12 +794,14 @@ mod tests {
             Transaction::write_read(DEFAULT_ADDRESS, vec![0xE7], vec![0x02]),
             Transaction::write(DEFAULT_ADDRESS, vec![0xE6, 0x03]),
             Transaction::write(DEFAULT_ADDRESS, vec![0xF5]),
+            Transaction::read(DEFAULT_ADDRESS, frame(0x4E86)),
+            Transaction::write(DEFAULT_ADDRESS, vec![0xF3]),
         ];
         let mut i2c = Mock::new(&expectations);
         let mut htu = Si70xx::new(&mut i2c, Variant::Htu21d);
         htu.set_resolution(Resolution::Rh8T12).unwrap();
         assert_eq!(htu.start_measurement().unwrap(), 3_000);
-        assert_eq!(htu.pending_wait_us(), 13_000);
+        assert_eq!(htu.read_measurement(), Err(Error::Pending(13_000)));
         i2c.done();
     }
 
@@ -864,12 +838,15 @@ mod tests {
         ];
         let mut i2c = Mock::new(&expectations);
         let mut si = Si70xx::new(&mut i2c, Variant::Si7006);
-        si.set_heater_level(0xFF).unwrap();
+        assert_eq!(si.set_heater_level(16), Err(Error::InvalidArgument));
+        si.set_heater_level(15).unwrap();
         i2c.done();
     }
 
     #[test]
     fn async_two_phase_measure() {
+        use zigbee_sensor::asynch::Sensor as _;
+
         struct RecordingDelay(u32);
         impl embedded_hal_async::delay::DelayNs for RecordingDelay {
             async fn delay_ns(&mut self, ns: u32) {
@@ -886,7 +863,7 @@ mod tests {
         let mut i2c = Mock::new(&expectations);
         let mut sht = asynch::Si70xx::new(&mut i2c, Variant::Sht25);
         let mut delay = RecordingDelay(0);
-        let m = block_on(sht.measure_all(&mut delay)).unwrap();
+        let m = block_on(sht.measure(&mut delay)).unwrap();
         assert_eq!(m.temperature, 2_469);
         assert_eq!(m.humidity, 5_479);
         assert_eq!(delay.0, 29_000 + 85_000);

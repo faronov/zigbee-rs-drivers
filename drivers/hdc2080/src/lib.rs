@@ -155,10 +155,18 @@ pub fn decode_measurement(variant: Variant, frame: &[u8; 4]) -> Measurement {
 }
 
 /// Temperature offset register (0x08) value for an offset in 0.01 °C.
-/// Two's complement with an LSB of 165/1024 °C (±20.6 °C range).
-pub fn temperature_offset_register(offset: i32) -> u8 {
+/// Two's complement with an LSB of 165/1024 °C (−20.63 … +20.46 °C);
+/// outside that range [`Error::InvalidArgument`].
+pub fn temperature_offset_register<E>(offset: i32) -> Result<u8, Error<E>> {
+    let offset = i64::from(offset);
     let raw = (offset * 1_024 + offset.signum() * 8_250) / 16_500;
-    raw.clamp(-128, 127) as i8 as u8
+    offset_byte(raw)
+}
+
+fn offset_byte<E>(raw: i64) -> Result<u8, Error<E>> {
+    i8::try_from(raw)
+        .map(|raw| raw as u8)
+        .map_err(|_| Error::InvalidArgument)
 }
 
 /// Offset in 0.01 °C encoded by a temperature offset register value.
@@ -168,10 +176,12 @@ pub fn temperature_offset_centi(raw: u8) -> i32 {
 }
 
 /// Humidity offset register (0x09) value for an offset in 0.01 %RH.
-/// Two's complement with an LSB of 100/512 %RH (±25 %RH range).
-pub fn humidity_offset_register(offset: i32) -> u8 {
+/// Two's complement with an LSB of 100/512 %RH (−25 … +24.80 %RH);
+/// outside that range [`Error::InvalidArgument`].
+pub fn humidity_offset_register<E>(offset: i32) -> Result<u8, Error<E>> {
+    let offset = i64::from(offset);
     let raw = (offset * 512 + offset.signum() * 5_000) / 10_000;
-    raw.clamp(-128, 127) as i8 as u8
+    offset_byte(raw)
 }
 
 /// Offset in 0.01 %RH encoded by a humidity offset register value.
@@ -435,15 +445,24 @@ mod tests {
         assert_eq!(temperature_offset_centi(0xFF), -16);
         assert_eq!(temperature_offset_centi(0x80), -2_063);
         assert_eq!(temperature_offset_centi(0x40), 1_031);
-        assert_eq!(temperature_offset_register(16), 0x01);
-        assert_eq!(temperature_offset_register(-16), 0xFF);
-        assert_eq!(temperature_offset_register(-5_000), 0x80);
+        assert_eq!(temperature_offset_register::<()>(16), Ok(0x01));
+        assert_eq!(temperature_offset_register::<()>(-16), Ok(0xFF));
+        assert_eq!(temperature_offset_register::<()>(-2_063), Ok(0x80));
+        assert_eq!(
+            temperature_offset_register::<()>(-5_000),
+            Err(Error::InvalidArgument)
+        );
         // Table: bit0 = +0.20 %RH, bit7 = −25 %RH, bit6 = +12.5 %RH.
         assert_eq!(humidity_offset_centi(0x01), 20);
         assert_eq!(humidity_offset_centi(0x80), -2_500);
         assert_eq!(humidity_offset_centi(0x40), 1_250);
-        assert_eq!(humidity_offset_register(1_250), 0x40);
-        assert_eq!(humidity_offset_register(-20), 0xFF);
+        assert_eq!(humidity_offset_register::<()>(1_250), Ok(0x40));
+        assert_eq!(humidity_offset_register::<()>(-20), Ok(0xFF));
+        assert_eq!(humidity_offset_register::<()>(2_480), Ok(0x7F));
+        assert_eq!(
+            humidity_offset_register::<()>(2_500),
+            Err(Error::InvalidArgument)
+        );
     }
 
     #[test]

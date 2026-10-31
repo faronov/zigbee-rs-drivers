@@ -11,7 +11,7 @@ Sensirion SHT20 / SHT21 / SHT25 (plus the many Si7021/HTU21D clones).
 | Standby current | 60 nA (Si7021), 0.02 µA (HTU21D), 0.15 µA (SHT21); automatic after each conversion |
 | Power-up | 80 ms max (Si7021 over temperature), 15 ms (HTU21D / SHT2x) |
 | Output | 0.01 °C, 0.01 %RH (RH clamped to 0..100 %) |
-| Features | resolution (user register, read-modify-write), heater on/off, Si70xx heater current, electronic ID, Si70xx device-code check and firmware revision |
+| Features | resolution (user register, read-modify-write), heater on/off, Si70xx heater current (0–15, else `InvalidArgument`), electronic ID, Si70xx device-code check and firmware revision |
 | Source | Si7021-A20 Rev 1.2; HTU21D(F) HPC199_3; SHT21 datasheet + "Electronic Identification Code" app note v1.1 |
 | Status | mock-tested |
 
@@ -22,9 +22,9 @@ required; the sensor NACKs reads while converting (reported as
 
 HTU21D and SHT2x cannot return the temperature of the previous humidity
 conversion, so `read_measurement` performs two phases: the first call
-reads RH, starts the temperature conversion and returns `Error::NotReady`;
-wait `pending_wait_us()` and call again. `Si70xx::measure` /
-`asynch::Si70xx::measure_all` do both steps.
+reads RH, starts the temperature conversion and returns
+`Error::Pending(wait_us)`; wait that long and call again. The core
+`measure` helpers follow both phases.
 
 Electronic-ID CRC bytes are not verified (coverage is not specified
 consistently across the datasheets).
