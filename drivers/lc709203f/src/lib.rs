@@ -171,6 +171,22 @@ pub const fn temperature_centi(raw: u16) -> i32 {
     raw as i32 * 10 - 27_320
 }
 
+fn check_temperature<E>(centi: i32) -> Result<(), Error<E>> {
+    if (-2_000..=6_000).contains(&centi) {
+        Ok(())
+    } else {
+        Err(Error::InvalidArgument)
+    }
+}
+
+fn check_rsoc<E>(percent: u8) -> Result<(), Error<E>> {
+    if percent <= 100 {
+        Ok(())
+    } else {
+        Err(Error::InvalidArgument)
+    }
+}
+
 /// 0.01 °C to the 0x08 register value, clamped to −20…+60 °C.
 pub const fn temperature_raw(centi: i32) -> u16 {
     let c = if centi < -2_000 {
@@ -321,8 +337,10 @@ impl<I2C: embedded_hal::i2c::I2c> Lc709203f<I2C> {
     }
 
     /// Host-supplied cell temperature in 0.01 °C (I2C mode; update when it
-    /// changes by more than 1 °C).
+    /// changes by more than 1 °C); [`Error::InvalidArgument`] outside
+    /// −20…+60 °C.
     pub fn set_temperature(&mut self, centi: i32) -> Result<(), Error<I2C::Error>> {
+        check_temperature(centi)?;
         self.write_register(reg::CELL_TEMPERATURE, temperature_raw(centi))
     }
 
@@ -334,13 +352,15 @@ impl<I2C: embedded_hal::i2c::I2c> Lc709203f<I2C> {
         self.write_register(reg::CURRENT_DIRECTION, direction as u16)
     }
 
-    /// ALARMB thresholds: RSOC in % and voltage in mV (0 disables).
+    /// ALARMB thresholds: RSOC in % and voltage in mV (0 disables);
+    /// [`Error::InvalidArgument`] for RSOC above 100 %.
     pub fn set_alarms(
         &mut self,
         rsoc_percent: u8,
         voltage_mv: u16,
     ) -> Result<(), Error<I2C::Error>> {
-        self.write_register(reg::ALARM_LOW_RSOC, rsoc_percent.min(100) as u16)?;
+        check_rsoc(rsoc_percent)?;
+        self.write_register(reg::ALARM_LOW_RSOC, rsoc_percent as u16)?;
         self.write_register(reg::ALARM_LOW_VOLTAGE, voltage_mv)
     }
 }
@@ -401,8 +421,8 @@ impl<I2C: embedded_hal::i2c::I2c> zigbee_sensor::blocking::LowPower for Lc709203
 pub mod asynch {
     use super::{
         ADDRESS, Config, CurrentDirection, INIT_RSOC_KEY, INIT_US, Measurement, POWER_OPERATIONAL,
-        POWER_SLEEP, WAKE_US, decode_read, encode_write, ite_half_percent, reg, temperature_centi,
-        temperature_raw,
+        POWER_SLEEP, WAKE_US, check_rsoc, check_temperature, decode_read, encode_write,
+        ite_half_percent, reg, temperature_centi, temperature_raw,
     };
     use embedded_hal_async::i2c::I2c;
     use zigbee_sensor::{Error, WaitUs};
@@ -496,6 +516,7 @@ pub mod asynch {
 
         /// See [`super::Lc709203f::set_temperature`].
         pub async fn set_temperature(&mut self, centi: i32) -> Result<(), Error<I2C::Error>> {
+            check_temperature(centi)?;
             self.write_register(reg::CELL_TEMPERATURE, temperature_raw(centi))
                 .await
         }
@@ -515,7 +536,8 @@ pub mod asynch {
             rsoc_percent: u8,
             voltage_mv: u16,
         ) -> Result<(), Error<I2C::Error>> {
-            self.write_register(reg::ALARM_LOW_RSOC, rsoc_percent.min(100) as u16)
+            check_rsoc(rsoc_percent)?;
+            self.write_register(reg::ALARM_LOW_RSOC, rsoc_percent as u16)
                 .await?;
             self.write_register(reg::ALARM_LOW_VOLTAGE, voltage_mv)
                 .await
@@ -684,7 +706,10 @@ mod tests {
         gauge
             .set_current_direction(CurrentDirection::Discharge)
             .unwrap();
-        gauge.set_alarms(150, 3_300).unwrap();
+        gauge.set_alarms(100, 3_300).unwrap();
+        assert_eq!(gauge.set_alarms(101, 3_300), Err(Error::InvalidArgument));
+        assert_eq!(gauge.set_temperature(6_001), Err(Error::InvalidArgument));
+        assert_eq!(gauge.set_temperature(-2_001), Err(Error::InvalidArgument));
         i2c.done();
     }
 

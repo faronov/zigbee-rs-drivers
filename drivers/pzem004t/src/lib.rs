@@ -219,6 +219,14 @@ enum Reply {
     Done,
 }
 
+fn check_write<E>(reg: u16, value: u16) -> Result<(), Error<E>> {
+    if reg == param::ADDRESS && !(0x01..=0xF7).contains(&value) {
+        Err(Error::InvalidArgument)
+    } else {
+        Ok(())
+    }
+}
+
 fn with_crc<const N: usize>(mut f: [u8; N]) -> [u8; N] {
     let crc = crc16_modbus(&f[..N - 2]).to_le_bytes();
     f[N - 2..].copy_from_slice(&crc);
@@ -478,8 +486,10 @@ where
 
     /// Write a holding register (see [`param`]); confirm with
     /// [`Self::read_reply`]. Writing [`param::ADDRESS`] switches the
-    /// driver to the new address once confirmed.
+    /// driver to the new address once confirmed; an address outside
+    /// 0x01-0xF7 is [`Error::InvalidArgument`].
     pub fn request_write(&mut self, reg: u16, value: u16) -> Result<WaitUs, Error<U::Error>> {
+        check_write(reg, value)?;
         self.send(Pending::Write(reg, value))
     }
 
@@ -524,7 +534,7 @@ where
 pub mod asynch {
     use super::{
         Link, MAX_DRAIN_BYTES, MAX_FRAME, MAX_READ_BYTES, Measurement, Model, Pending, Reply,
-        ShuntRange, param,
+        ShuntRange, check_write, param,
     };
     use zigbee_sensor::{Error, WaitUs};
 
@@ -595,6 +605,7 @@ pub mod asynch {
             reg: u16,
             value: u16,
         ) -> Result<WaitUs, Error<U::Error>> {
+            check_write(reg, value)?;
             self.send(Pending::Write(reg, value)).await
         }
 
@@ -820,6 +831,10 @@ mod tests {
         assert_eq!(pzem.uart.tx, crc(vec![0x01, 0x03, 0x00, 0x01, 0x00, 0x01]));
         assert_eq!(pzem.read_reply(), Ok(2300));
 
+        assert_eq!(
+            pzem.request_write(param::ADDRESS, 0xF8),
+            Err(Error::InvalidArgument)
+        );
         // Address change takes effect once confirmed.
         pzem.uart.on_write = crc(vec![0x01, 0x06, 0x00, 0x02, 0x00, 0x05]);
         pzem.request_write(param::ADDRESS, 5).unwrap();

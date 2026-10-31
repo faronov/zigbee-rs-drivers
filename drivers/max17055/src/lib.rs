@@ -4,7 +4,8 @@
 //! The gauge measures continuously (one task period is 175.8 ms in active
 //! mode, 5.625 s in hibernate), so `start_measurement` returns 0 and
 //! `read_measurement` reads VCell, Current, AvgCurrent, Temp, RepCap,
-//! RepSOC, FullCapRep and TTE in three auto-increment word reads.
+//! RepSOC, FullCapRep and TTE in three auto-increment word reads, then
+//! TTF.
 //!
 //! Registers are 16 bit, least-significant byte first. Capacity and
 //! current scale with the sense resistor, given in µΩ (default 10 mΩ,
@@ -59,6 +60,8 @@ pub mod reg {
     pub const FULL_CAP_REP: u8 = 0x10;
     /// TTE (5.625 s).
     pub const TTE: u8 = 0x11;
+    /// TTF (5.625 s).
+    pub const TTF: u8 = 0x20;
     /// DesignCap.
     pub const DESIGN_CAP: u8 = 0x18;
     /// Config.
@@ -271,7 +274,8 @@ pub const fn soc_half_percent(raw: u16) -> u8 {
     if half > 200 { 200 } else { half as u8 }
 }
 
-/// TTE (5.625 s) → seconds; 0xFFFF (not discharging) → `None`.
+/// TTE / TTF (5.625 s) → seconds; 0xFFFF (not discharging / not
+/// charging) → `None`.
 pub const fn tte_seconds(raw: u16) -> Option<u32> {
     if raw == 0xFFFF {
         None
@@ -299,18 +303,31 @@ pub struct Measurement {
     pub full_capacity: u32,
     /// Time to empty in seconds (`None` when not discharging).
     pub time_to_empty: Option<u32>,
+    /// Time to full in seconds (`None` when not charging).
+    pub time_to_full: Option<u32>,
 }
 
+/// Yields voltage, current, battery percent, temperature, `Charge`
+/// (RepCap), `Capacity` (FullCapRep) and, when valid, `TimeToEmpty` /
+/// `TimeToFull`.
 impl Readings for Measurement {
     fn for_each(&self, f: &mut dyn FnMut(Quantity)) {
         f(Quantity::Voltage(self.voltage));
         f(Quantity::Current(self.current));
         f(Quantity::BatteryPercent(self.percent));
         f(Quantity::Temperature(self.temperature));
+        f(Quantity::Charge(self.remaining_capacity));
+        f(Quantity::Capacity(self.full_capacity));
+        if let Some(s) = self.time_to_empty {
+            f(Quantity::TimeToEmpty(s));
+        }
+        if let Some(s) = self.time_to_full {
+            f(Quantity::TimeToFull(s));
+        }
     }
 }
 
-fn decode(scale: &Scale, a: &[u8; 8], b: &[u8; 4], c: &[u8; 4]) -> Measurement {
+fn decode(scale: &Scale, a: &[u8; 8], b: &[u8; 4], c: &[u8; 4], d: &[u8; 2]) -> Measurement {
     let w = |s: &[u8], i: usize| u16::from_le_bytes([s[2 * i], s[2 * i + 1]]);
     Measurement {
         temperature: temperature_centi(w(a, 0)),
@@ -321,6 +338,7 @@ fn decode(scale: &Scale, a: &[u8; 8], b: &[u8; 4], c: &[u8; 4]) -> Measurement {
         percent: soc_half_percent(w(b, 1)),
         full_capacity: scale.capacity_uah(w(c, 0)),
         time_to_empty: tte_seconds(w(c, 1)),
+        time_to_full: tte_seconds(w(d, 0)),
     }
 }
 
@@ -467,7 +485,8 @@ impl<I2C: embedded_hal::i2c::I2c> zigbee_sensor::blocking::Sensor for Max17055<I
         let a = self.read_block::<8>(reg::TEMP)?;
         let b = self.read_block::<4>(reg::REP_CAP)?;
         let c = self.read_block::<4>(reg::FULL_CAP_REP)?;
-        Ok(decode(&self.scale, &a, &b, &c))
+        let d = self.read_block::<2>(reg::TTF)?;
+        Ok(decode(&self.scale, &a, &b, &c, &d))
     }
 }
 
@@ -613,7 +632,8 @@ pub mod asynch {
             let a = self.read_block::<8>(reg::TEMP).await?;
             let b = self.read_block::<4>(reg::REP_CAP).await?;
             let c = self.read_block::<4>(reg::FULL_CAP_REP).await?;
-            Ok(decode(&self.scale, &a, &b, &c))
+            let d = self.read_block::<2>(reg::TTF).await?;
+            Ok(decode(&self.scale, &a, &b, &c, &d))
         }
     }
 
@@ -657,11 +677,12 @@ mod tests {
         T::write_read(ADDRESS, vec![reg], bytes)
     }
 
-    fn measurement_reads() -> [T; 3] {
+    fn measurement_reads() -> [T; 4] {
         [
             rdn(reg::TEMP, &[0x1980, 47_360, 0xFF9C, 0xFFC0]),
             rdn(reg::REP_CAP, &[2_000, 0x3200]),
             rdn(reg::FULL_CAP_REP, &[4_000, 640]),
+            rd(reg::TTF, 0xFFFF),
         ]
     }
 
@@ -674,7 +695,31 @@ mod tests {
         remaining_capacity: 1_000_000,
         full_capacity: 2_000_000,
         time_to_empty: Some(3_600),
+        time_to_full: None,
     };
+
+    #[test]
+    fn readings() {
+        let mut q = Vec::new();
+        EXPECTED.for_each(&mut |x| q.push(x));
+        assert_eq!(
+            &q[4..],
+            &[
+                Quantity::Charge(1_000_000),
+                Quantity::Capacity(2_000_000),
+                Quantity::TimeToEmpty(3_600),
+            ]
+        );
+        let charging = Measurement {
+            time_to_empty: None,
+            time_to_full: Some(1_800),
+            ..EXPECTED
+        };
+        q.clear();
+        charging.for_each(&mut |x| q.push(x));
+        assert_eq!(q.last(), Some(&Quantity::TimeToFull(1_800)));
+        assert_eq!(q.len(), 7);
+    }
 
     #[test]
     fn conversions() {

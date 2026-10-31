@@ -688,11 +688,11 @@ impl<IFACE: Interface> Ade7953<IFACE> {
     }
 
     /// Lock the interface, apply the 0x120 setting, write LCYCMODE, gains
-    /// and trims and clear the reset flag. [`Error::Unsupported`] for a ×22
+    /// and trims and clear the reset flag. [`Error::InvalidArgument`] for a ×22
     /// gain on the voltage channel or Channel B.
     pub fn init(&mut self) -> Result<(), Error<IFACE::Error>> {
         if !self.config.is_valid() {
-            return Err(Error::Unsupported);
+            return Err(Error::InvalidArgument);
         }
         self.write_register(reg::CONFIG, CONFIG_INIT as u32)?;
         self.write_register(reg::UNLOCK, UNLOCK_KEY as u32)?;
@@ -851,7 +851,7 @@ pub mod asynch {
         /// See [`super::Ade7953::init`].
         pub async fn init(&mut self) -> Result<(), Error<IFACE::Error>> {
             if !self.config.is_valid() {
-                return Err(Error::Unsupported);
+                return Err(Error::InvalidArgument);
             }
             self.write_register(reg::CONFIG, CONFIG_INIT as u32).await?;
             self.write_register(reg::UNLOCK, UNLOCK_KEY as u32).await?;
@@ -1074,7 +1074,7 @@ mod tests {
                 pga_v: Gain::X22,
                 ..Config::default()
             });
-        assert_eq!(ade.init(), Err(Error::Unsupported));
+        assert_eq!(ade.init(), Err(Error::InvalidArgument));
         ade.set_energy_mwh(5_000);
         let m = ade.read_measurement().unwrap();
         // One LSB of export = -1.608 mW.

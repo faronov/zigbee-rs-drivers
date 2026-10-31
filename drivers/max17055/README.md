@@ -7,7 +7,7 @@ Maxim (Analog Devices) MAX17055 1-cell ModelGauge m5 EZ fuel gauge over I2C.
 | Address | 0x36 (fixed) |
 | Conversion | autonomous: 175.8 ms task period (active), 5.625 s (hibernate) |
 | Power-down current | shutdown 0.5 µA typ (state lost); hibernate 7 µA; active 18 µA |
-| Output | cell voltage mV, current / average current µA, temperature 0.01 °C, RepSOC 0.5 %, RepCap / FullCapRep µAh, TTE s |
+| Output | cell voltage mV, current / average current µA, temperature 0.01 °C, RepSOC 0.5 %, RepCap / FullCapRep µAh, TTE / TTF s |
 | Calibration | sense resistor µΩ (`with_sense_resistor`, default 10 mΩ); `EzConfig` (design capacity, termination current, VEmpty, VChg, model) |
 | Source | Maxim MAX17055 data sheet 19-8758 Rev 3; UG6365 Software Implementation Guide Rev 2 |
 | Status | mock-tested |
@@ -31,6 +31,7 @@ Notes:
   mode; it takes effect after ShdnTimer (45 s default), any SDA/SCL edge
   wakes the IC, and the next boot needs the EZ configuration again.
 - `probe` checks DevName = 0x4010.
-- RepCap, FullCapRep and TTE are reported in the struct only. Core
-  `Quantity` has no capacity or time variant. `Readings` yields voltage,
-  current, battery percent and temperature.
+- `Readings` yields voltage, current, battery percent, temperature,
+  `Charge` (RepCap), `Capacity` (FullCapRep) and `TimeToEmpty` /
+  `TimeToFull` when the gauge reports them (0xFFFF = not discharging /
+  not charging is omitted). Average current is in the struct only.

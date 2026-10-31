@@ -316,6 +316,8 @@ impl Measurement {
     }
 }
 
+/// Yields voltage, current, power, battery percent, temperature, `Charge`
+/// (RemainingCapacity) and `Capacity` (FullChargeCapacity) in µAh.
 impl Readings for Measurement {
     fn for_each(&self, f: &mut dyn FnMut(Quantity)) {
         f(Quantity::Voltage(self.voltage));
@@ -323,6 +325,10 @@ impl Readings for Measurement {
         f(Quantity::Power(self.power));
         f(Quantity::BatteryPercent(self.percent));
         f(Quantity::Temperature(self.temperature));
+        f(Quantity::Charge(self.remaining_capacity_mah as u32 * 1_000));
+        f(Quantity::Capacity(
+            self.full_charge_capacity_mah as u32 * 1_000,
+        ));
     }
 }
 
@@ -377,7 +383,7 @@ impl<I2C: embedded_hal::i2c::I2c> Bq27441<I2C> {
     /// Write `data` starting at command `cmd` (≤ 32 bytes).
     pub fn write_bytes(&mut self, cmd: u8, data: &[u8]) -> Result<(), Error<I2C::Error>> {
         if data.len() > 32 {
-            return Err(Error::InvalidData);
+            return Err(Error::InvalidArgument);
         }
         if self.byte_writes {
             for (i, b) in data.iter().enumerate() {
@@ -511,7 +517,7 @@ impl<I2C: embedded_hal::i2c::I2c> Bq27441<I2C> {
         buf: &mut [u8],
     ) -> Result<(), Error<I2C::Error>> {
         if !check_range(offset, buf.len()) {
-            return Err(Error::InvalidData);
+            return Err(Error::InvalidArgument);
         }
         self.select_data_block(class, offset / 32)?;
         self.read_bytes(cmd::BLOCK_DATA + offset % 32, buf)
@@ -527,7 +533,7 @@ impl<I2C: embedded_hal::i2c::I2c> Bq27441<I2C> {
         data: &[u8],
     ) -> Result<(), Error<I2C::Error>> {
         if !check_range(offset, data.len()) {
-            return Err(Error::InvalidData);
+            return Err(Error::InvalidArgument);
         }
         let lo = (offset % 32) as usize;
         self.update_block(class, offset / 32, |block| {
@@ -635,7 +641,7 @@ pub mod asynch {
         /// See [`super::Bq27441::write_bytes`].
         pub async fn write_bytes(&mut self, cmd: u8, data: &[u8]) -> Result<(), Error<I2C::Error>> {
             if data.len() > 32 {
-                return Err(Error::InvalidData);
+                return Err(Error::InvalidArgument);
             }
             if self.byte_writes {
                 for (i, b) in data.iter().enumerate() {
@@ -775,7 +781,7 @@ pub mod asynch {
             buf: &mut [u8],
         ) -> Result<(), Error<I2C::Error>> {
             if !check_range(offset, buf.len()) {
-                return Err(Error::InvalidData);
+                return Err(Error::InvalidArgument);
             }
             self.select_data_block(class, offset / 32).await?;
             self.read_bytes(cmd::BLOCK_DATA + offset % 32, buf).await
@@ -789,7 +795,7 @@ pub mod asynch {
             data: &[u8],
         ) -> Result<(), Error<I2C::Error>> {
             if !check_range(offset, data.len()) {
-                return Err(Error::InvalidData);
+                return Err(Error::InvalidArgument);
             }
             let lo = (offset % 32) as usize;
             self.update_block(class, offset / 32, |block| {
@@ -947,8 +953,9 @@ mod tests {
         let mut gauge = Bq27441::new(&mut i2c, Variant::Bq27421);
         gauge.probe().unwrap();
         assert_eq!(gauge.start_measurement(), Ok(0));
+        let m = gauge.read_measurement().unwrap();
         assert_eq!(
-            gauge.read_measurement().unwrap(),
+            m,
             Measurement {
                 voltage: 3_850,
                 current: -150_000,
@@ -960,6 +967,12 @@ mod tests {
                 state_of_health: Some(98),
                 flags: FLAGS_BAT_DET | FLAGS_DSG,
             }
+        );
+        let mut q = Vec::new();
+        m.for_each(&mut |x| q.push(x));
+        assert_eq!(
+            &q[5..],
+            &[Quantity::Charge(600_000), Quantity::Capacity(1_180_000)]
         );
         gauge.sleep().unwrap();
         assert_eq!(gauge.wake(), Ok(1_000_000));
@@ -1023,12 +1036,12 @@ mod tests {
         gauge.write_temperature(2_505).unwrap();
         assert_eq!(
             gauge.write_data_memory(82, 30, &[1, 2, 3]),
-            Err(Error::InvalidData)
+            Err(Error::InvalidArgument)
         );
         let mut buf = [0; 0];
         assert_eq!(
             gauge.read_data_memory(82, 0, &mut buf),
-            Err(Error::InvalidData)
+            Err(Error::InvalidArgument)
         );
         i2c.done();
     }

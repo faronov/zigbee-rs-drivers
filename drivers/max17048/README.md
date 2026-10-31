@@ -31,5 +31,6 @@ Notes:
 - `compensated_rcomp` implements the data-sheet temperature compensation
   (defaults RCOMP0 0x97, TempCoUp −0.5, TempCoDown −5.0) in integer math.
 - MAX17048/49 extras: `set_hibernate` (HIBRT, `(0, 0)` disables
-  hibernate), `set_voltage_alert` (VALRT, 20 mV steps), `status`,
+  hibernate), `set_voltage_alert` (VALRT, 20 mV steps, ≤ 5100 mV else
+  `InvalidArgument`), `status`,
   `clear_alert`. These return `Unsupported` on MAX17043/44.

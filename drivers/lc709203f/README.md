@@ -37,8 +37,8 @@ Notes:
 - `LowPower::sleep` writes sleep mode. RSOC tracking stops and charge moved
   while asleep is lost. Operational mode is only 3 µA, so many designs
   never sleep it.
-- Temperature: in I2C mode, the host writes `set_temperature` (−20…+60 °C
-  clamp) and the reading omits temperature. In thermistor mode, 0x08 is
+- Temperature: in I2C mode, the host writes `set_temperature` (−20…+60 °C;
+  `InvalidArgument` outside) and the reading omits temperature. In thermistor mode, 0x08 is
   measured and reported. The register uses 0 °C = 0x0AAC (273.2 K).
 - `probe` reads Number of the Parameter (0x1A). The CRC check is the
   identity test because the part has no fixed ID; 0x0000 and 0xFFFF are

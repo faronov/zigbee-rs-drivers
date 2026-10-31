@@ -451,7 +451,9 @@ pub struct Measurement {
 
 impl Readings for Measurement {
     /// Voltage, Current, Power, Temperature, then Energy when available.
-    /// Charge has no `Quantity`; read it from the struct.
+    /// Charge is a signed coulomb count since the last reset, not the
+    /// remaining battery charge that `Quantity::Charge` means, so it stays
+    /// in the struct.
     fn for_each(&self, f: &mut dyn FnMut(Quantity)) {
         f(Quantity::Voltage(self.bus_voltage));
         f(Quantity::Current(self.current));
