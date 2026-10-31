@@ -1,0 +1,19 @@
+[package]
+name = "zigbee-ina226"
+description = "TI INA226/INA230/INA231 current/voltage/power monitor driver (blocking + async)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+zigbee-sensor.workspace = true
+embedded-hal.workspace = true
+embedded-hal-async.workspace = true
+
+[dev-dependencies]
+embedded-hal-mock.workspace = true
+
+[lints]
+workspace = true

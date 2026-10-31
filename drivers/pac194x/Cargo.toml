@@ -1,0 +1,19 @@
+[package]
+name = "zigbee-pac194x"
+description = "Microchip PAC1941/PAC1942/PAC1943/PAC1944 multi-channel power and energy monitor driver (blocking + async)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+zigbee-sensor.workspace = true
+embedded-hal.workspace = true
+embedded-hal-async.workspace = true
+
+[dev-dependencies]
+embedded-hal-mock.workspace = true
+
+[lints]
+workspace = true

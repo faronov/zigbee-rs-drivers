@@ -1,0 +1,17 @@
+[package]
+name = "zigbee-battery"
+description = "Battery voltage (ADC + divider) to Zigbee BatteryVoltage / BatteryPercentageRemaining with discharge curves for coin, alkaline, NiMH, Li-ion and LiFePO4 cells"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+zigbee-sensor.workspace = true
+
+[dev-dependencies]
+embedded-hal-async.workspace = true
+
+[lints]
+workspace = true

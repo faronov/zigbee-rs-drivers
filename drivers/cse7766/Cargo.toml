@@ -1,0 +1,19 @@
+[package]
+name = "zigbee-cse7766"
+description = "Chipsea CSE7766 energy metering IC driver (UART, blocking + async)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+zigbee-sensor.workspace = true
+embedded-io.workspace = true
+embedded-io-async.workspace = true
+
+[dev-dependencies]
+embedded-hal-async.workspace = true
+
+[lints]
+workspace = true
