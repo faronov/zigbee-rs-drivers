@@ -137,6 +137,11 @@ macro_rules! constructors {
         pub fn release(self) -> I2C {
             self.i2c
         }
+
+        /// 7-bit I2C address in use.
+        pub const fn address(&self) -> u8 {
+            self.address
+        }
     };
 }
 
