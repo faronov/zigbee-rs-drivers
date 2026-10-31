@@ -1,0 +1,19 @@
+[package]
+name = "zigbee-hcsr04"
+description = "HC-SR04 / RCWL-1601 ultrasonic ranger driver (trigger + echo timing, temperature compensated)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+zigbee-sensor.workspace = true
+embedded-hal.workspace = true
+embedded-hal-async.workspace = true
+
+[dev-dependencies]
+embedded-hal-mock.workspace = true
+
+[lints]
+workspace = true
