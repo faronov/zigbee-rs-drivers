@@ -30,8 +30,8 @@ Notes:
 - Parameters: `request_parameter(reg)` / `request_write(reg, value)` /
   `request_reset_energy()` then `read_reply()` (writes are confirmed by
   the echoed frame). Registers in `param`: AC power alarm (1 W), DC
-  high / low voltage alarm (0.01 V), Modbus address (the driver follows a
-  confirmed address change), PZEM-017 shunt range. Function 0x41
+  high / low voltage alarm (0.01 V), Modbus address (0x01-0xF7, else
+  `InvalidArgument`; the driver follows a confirmed address change), PZEM-017 shunt range. Function 0x41
   (factory calibration) is intentionally not exposed.
 - Energy is kept by the module (non-volatile) and only cleared by the
   reset command.

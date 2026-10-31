@@ -55,5 +55,8 @@ Notes:
   mode; to exit it, raise GPOUT from low to high for ≥ 200 µs.
 - Temperature is the internal sensor unless OpConfig.TEMPS = 1, in which
   case the host supplies it with `write_temperature`.
-- Remaining and full-charge capacity and SOH are reported in the struct
-  only. Core `Quantity` has no capacity variant.
+- `Readings` yields voltage, current, power, battery percent,
+  temperature, `Charge` (RemainingCapacity) and `Capacity`
+  (FullChargeCapacity) in µAh. SOH and Flags are in the struct only.
+- Data-memory accesses that cross a 32-byte block, are empty, or write
+  more than 32 bytes return `Error::InvalidArgument`.

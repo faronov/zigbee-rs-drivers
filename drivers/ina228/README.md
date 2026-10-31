@@ -30,6 +30,8 @@ Notes:
   current/power, Q40 for energy/charge (20-bit split multiply, no 128-bit
   math or runtime division). Current LSB is limited to ≤ 4.096 mA so the
   full scale fits `i32` µA.
-- Charge has no `Quantity` variant, so it is not yielded by `Readings`.
+- Charge is a signed coulomb count since the last accumulator reset, not
+  the remaining battery charge `Quantity::Charge` stands for, so
+  `Readings` does not yield it.
 - Alert limits, SHUNT_TEMPCO and CONVDLY are reachable through
   `write_register` with the `reg::*` addresses.

@@ -8,7 +8,7 @@ ModelGauge m5 EZ fuel gauges over I2C.
 | Address | 0x36 (fixed) |
 | Conversion | autonomous: 175.8 ms task period (active), 5.625 s (hibernate) |
 | Power-down current | shutdown 0.5 µA typ (state lost); hibernate 5.1 µA (60/61), 5.2 µA (62), 8.2 µA (63); active 15–16 µA |
-| Output | pack voltage mV, current / average current µA, temperature 0.01 °C, RepSOC 0.5 %, RepCap / FullCapRep µAh, TTE s |
+| Output | pack voltage mV, current / average current µA, temperature 0.01 °C, RepSOC 0.5 %, RepCap / FullCapRep µAh, TTE / TTF s |
 | Calibration | sense resistor µΩ (default 10 mΩ; MAX17262R/H use their 10 / 30 mΩ internal equivalent); cells; `EzConfig` (design capacity, termination current, VEmpty, VChg, model, R100) |
 | Source | ADI MAX17260/61/62/63 data sheets; UG6597 MAX1726x ModelGauge m5 EZ User Guide Rev 3 |
 | Status | mock-tested |
@@ -37,5 +37,7 @@ Notes:
 - `probe` checks DevName: 0x4031 (60), 0x4033 (61), 0x4039 (62), 0x4037 (63).
 - MAX17262 Power/AvgPower use a fixed 1.6 mW LSB. The driver does not read
   them.
-- RepCap, FullCapRep and TTE are reported in the struct only. Core
-  `Quantity` has no capacity or time variant.
+- `Readings` yields voltage, current, battery percent, temperature,
+  `Charge` (RepCap), `Capacity` (FullCapRep) and `TimeToEmpty` /
+  `TimeToFull` when the gauge reports them (0xFFFF = not discharging /
+  not charging is omitted). Average current is in the struct only.

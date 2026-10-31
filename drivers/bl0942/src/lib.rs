@@ -692,6 +692,14 @@ impl<SPI: embedded_hal::spi::SpiDevice> Interface for SpiInterface<SPI> {
     }
 }
 
+fn check_24bit<E>(value: u32) -> Result<(), Error<E>> {
+    if value > 0xFF_FFFF {
+        Err(Error::InvalidArgument)
+    } else {
+        Ok(())
+    }
+}
+
 fn finish_packet<E>(r: Option<Response>) -> Result<Raw, Error<E>> {
     match r {
         Some(Response::Packet(raw)) => Ok(raw),
@@ -769,8 +777,10 @@ impl<IFACE: Interface> Bl0942<IFACE> {
     }
 
     /// Write a 24-bit register (user registers need
-    /// [`Self::unlock`] first).
+    /// [`Self::unlock`] first); [`Error::InvalidArgument`] if `value`
+    /// does not fit 24 bits.
     pub fn write_register(&mut self, reg: u8, value: u32) -> Result<(), Error<IFACE::Error>> {
+        check_24bit(value)?;
         self.iface.write_reg(reg, value).map_err(Error::bus)
     }
 
@@ -811,8 +821,8 @@ pub mod asynch {
     use super::{
         Calibration, EnergyCounter, FULL_PACKET, MAX_DRAIN_BYTES, MAX_READ_BYTES, Measurement,
         PACKET_LEN, Pending, Response, SOFT_RESET_KEY, SPI_SNAPSHOT, SpiInterface, UNLOCK_KEY,
-        UartInterface, convert, finish_packet, finish_register, raw_from_registers, reg, spi_value,
-        spi_write_frame,
+        UartInterface, check_24bit, convert, finish_packet, finish_register, raw_from_registers,
+        reg, spi_value, spi_write_frame,
     };
     use zigbee_sensor::{Error, WaitUs};
 
@@ -954,6 +964,7 @@ pub mod asynch {
             reg: u8,
             value: u32,
         ) -> Result<(), Error<IFACE::Error>> {
+            check_24bit(value)?;
             self.iface.write_reg(reg, value).await.map_err(Error::bus)
         }
 
@@ -1158,6 +1169,10 @@ mod tests {
             .set_mode(mode::DEFAULT | mode::RMS_UPDATE_800MS)
             .unwrap();
         meter.soft_reset().unwrap();
+        assert_eq!(
+            meter.write_register(reg::MODE, 0x0100_0000),
+            Err(Error::InvalidArgument)
+        );
         // Section 3.2.3: [A8|addr, reg, L, M, H, !(sum)].
         assert_eq!(
             meter.iface.uart.tx[2..],

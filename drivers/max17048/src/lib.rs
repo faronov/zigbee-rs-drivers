@@ -202,7 +202,18 @@ impl Readings for Measurement {
     }
 }
 
-/// CONFIG register value from RCOMP, empty-alert threshold and ALSC.
+fn valrt<E>(min_mv: u16, max_mv: u16) -> Result<u16, Error<E>> {
+    if min_mv > 5_100 || max_mv > 5_100 {
+        return Err(Error::InvalidArgument);
+    }
+    Ok(u16::from_be_bytes([
+        (min_mv / 20) as u8,
+        (max_mv / 20) as u8,
+    ]))
+}
+
+/// CONFIG register value from RCOMP, empty-alert threshold (clamped to
+/// 1…32 %) and ALSC.
 pub const fn config_value(rcomp: u8, empty_alert_percent: u8, soc_change_alert: bool) -> u16 {
     let pct = if empty_alert_percent < 1 {
         1
@@ -355,11 +366,12 @@ impl<I2C: embedded_hal::i2c::I2c> Max17048<I2C> {
         self.write_register(reg::HIBRT, u16::from_be_bytes([hib_thr, act_thr]))
     }
 
-    /// VCELL alert window in mV per cell (20 mV steps, MAX17048/49).
+    /// VCELL alert window in mV per cell (20 mV steps, MAX17048/49);
+    /// [`Error::InvalidArgument`] above 5100 mV.
     pub fn set_voltage_alert(&mut self, min_mv: u16, max_mv: u16) -> Result<(), Error<I2C::Error>> {
         self.require_max17048()?;
-        let step = |mv: u16| (mv / 20).min(255) as u8;
-        self.write_register(reg::VALRT, u16::from_be_bytes([step(min_mv), step(max_mv)]))
+        let valrt = valrt(min_mv, max_mv)?;
+        self.write_register(reg::VALRT, valrt)
     }
 
     fn require_max17048(&self) -> Result<(), Error<I2C::Error>> {
@@ -427,7 +439,7 @@ pub mod asynch {
     use super::{
         ADDRESS, CONFIG_ALRT, CONFIG_ALSC, CONFIG_SLEEP, MODE_EN_SLEEP, MODE_QUICK_START,
         Measurement, RCOMP_DEFAULT, STATUS_RI, Variant, config_value, crate_milli_percent_per_hour,
-        reg, soc_half_percent, vcell_millivolts,
+        reg, soc_half_percent, valrt, vcell_millivolts,
     };
     use embedded_hal_async::i2c::I2c;
     use zigbee_sensor::{Error, WaitUs};
@@ -541,9 +553,8 @@ pub mod asynch {
             max_mv: u16,
         ) -> Result<(), Error<I2C::Error>> {
             self.require_max17048()?;
-            let step = |mv: u16| (mv / 20).min(255) as u8;
-            self.write_register(reg::VALRT, u16::from_be_bytes([step(min_mv), step(max_mv)]))
-                .await
+            let valrt = valrt(min_mv, max_mv)?;
+            self.write_register(reg::VALRT, valrt).await
         }
 
         fn require_max17048(&self) -> Result<(), Error<I2C::Error>> {
@@ -714,6 +725,10 @@ mod tests {
         let mut gauge = Max17048::new(&mut i2c, Variant::Max17049);
         gauge.set_hibernate(0, 0).unwrap();
         gauge.set_voltage_alert(3_500, 4_200).unwrap();
+        assert_eq!(
+            gauge.set_voltage_alert(3_500, 5_120),
+            Err(Error::InvalidArgument)
+        );
         gauge.clear_alert(STATUS_HD).unwrap();
         gauge.set_rcomp(0x70).unwrap();
         i2c.done();

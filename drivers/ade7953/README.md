@@ -37,7 +37,7 @@ Notes:
   longer at lower power. Energy reported = max(total, 0).
 - Channel A (shunt, PGA ×1-×22) or B (CT, ×1-×16) via `with_channel` /
   `set_channel`; give each its own `Calibration` if the front ends differ.
-  ×22 on PGA_V or PGA_IB → `init` returns `Unsupported`.
+  ×22 on PGA_V or PGA_IB → `init` returns `InvalidArgument`.
 - Scaling: datasheet full-scale codes (IRMS/VRMS 9 032 007 for 500 mV
   peak, AWATT 4 862 401, AENERGY 206.9 kHz at unity WGAIN) are typical;
   calibrate against a reference meter. Frequency = 223.75 kHz / (PERIOD +
