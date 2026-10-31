@@ -23,6 +23,8 @@ Notes:
   before each heated measurement.
 * `Readings` publishes the gas resistance only when both `gas_valid` and
   `heat_stab` are set. Use `Config { heater: None, .. }` for T/P/RH only.
+* `set_config` returns `InvalidArgument` for a heater above 400 °C, a
+  heater duration outside 1..=4032 ms, or skipped temperature.
 * The integer pressure formula is up to ~8 Pa away from the float one.
 * Wiring: CSB high selects I2C; a falling edge on CSB switches to SPI until
   power-off. SDO selects the I2C address.

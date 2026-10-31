@@ -7,18 +7,15 @@
 //! 1. `start_measurement` starts the temperature conversion and returns its
 //!    wait (4.5 ms).
 //! 2. The first `read_measurement` reads the raw temperature, starts the
-//!    pressure conversion and returns [`Error::NotReady`];
-//!    [`Bmp180::pending_wait_us`] then gives the pressure conversion time
-//!    for the configured oversampling.
+//!    pressure conversion and returns [`Error::Pending`] with the pressure
+//!    conversion time for the configured oversampling.
 //! 3. The second `read_measurement` reads the raw pressure and returns the
 //!    compensated [`Measurement`].
 //!
-//! Because of step 2 the generic `measure` helpers of `zigbee-sensor`
-//! (start, one wait, one read) stop with `NotReady`; use
-//! [`Bmp180::measure_full`] instead, or drive the three steps from the
-//! application's scheduler. `read_measurement` also returns `NotReady`
-//! while the conversion is still running (`ctrl_meas.sco`), without
-//! changing state.
+//! The `measure` helpers of `zigbee-sensor` follow the `Pending` phase by
+//! themselves; an event loop waits the returned time and reads again.
+//! `read_measurement` returns [`Error::NotReady`] while the conversion is
+//! still running (`ctrl_meas.sco`), without changing state.
 //!
 //! The BMP180 enters standby (0.1 µA typ.) after every conversion; there
 //! is no sleep command.
@@ -35,7 +32,7 @@
 //! let m = loop {
 //!     // ... let the Zigbee stack run / sleep for wait_us ...
 //!     match bmp.read_measurement() {
-//!         Err(Error::NotReady) => wait_us = bmp.pending_wait_us(),
+//!         Err(Error::Pending(next)) => wait_us = next,
 //!         other => break other?,
 //!     }
 //! };
@@ -212,8 +209,9 @@ pub enum Phase {
 }
 
 enum Step {
-    /// Raw temperature captured: write this `ctrl_meas` to start pressure.
-    StartPressure(u8),
+    /// Raw temperature captured: write this `ctrl_meas` to start pressure,
+    /// then wait this long.
+    StartPressure(u8, WaitUs),
     Done(Measurement),
 }
 
@@ -235,14 +233,6 @@ impl State {
         }
     }
 
-    const fn pending_wait_us(&self) -> WaitUs {
-        match self.phase {
-            Phase::Idle => 0,
-            Phase::Temperature => TEMPERATURE_CONVERSION_US,
-            Phase::Pressure => self.oss.conversion_us(),
-        }
-    }
-
     fn calibrated<E>(raw: &[u8; LEN_CALIB]) -> Result<Calibration, Error<E>> {
         Calibration::parse(raw).ok_or(Error::InvalidData)
     }
@@ -254,7 +244,10 @@ impl State {
         let [_, _, msb, lsb, xlsb] = *frame;
         if self.phase == Phase::Temperature {
             self.ut = u16::from_be_bytes([msb, lsb]);
-            return Ok(Step::StartPressure(self.oss.command()));
+            return Ok(Step::StartPressure(
+                self.oss.command(),
+                self.oss.conversion_us(),
+            ));
         }
         self.phase = Phase::Idle;
         let up =
@@ -297,12 +290,6 @@ macro_rules! constructors {
         /// Current step of the two-phase cycle.
         pub const fn phase(&self) -> Phase {
             self.state.phase
-        }
-
-        /// Time to wait before the next `read_measurement`: the conversion
-        /// currently running (0 when idle).
-        pub const fn pending_wait_us(&self) -> WaitUs {
-            self.state.pending_wait_us()
         }
 
         /// Give the bus back.
@@ -366,25 +353,6 @@ impl<I2C: embedded_hal::i2c::I2c> Bmp180<I2C> {
         self.state.calibration = Some(calibration);
         Ok(calibration)
     }
-
-    /// Run a complete cycle (temperature then pressure), blocking on
-    /// `delay`. For tests and bring-up, not for a Zigbee event loop.
-    pub fn measure_full<D: embedded_hal::delay::DelayNs>(
-        &mut self,
-        delay: &mut D,
-    ) -> Result<Measurement, Error<I2C::Error>> {
-        use zigbee_sensor::blocking::Sensor;
-        let mut wait = self.start_measurement()?;
-        // Two phases, plus a few retries if a conversion is still running.
-        for _ in 0..4 {
-            delay.delay_us(wait);
-            match self.read_measurement() {
-                Err(Error::NotReady) => wait = self.pending_wait_us(),
-                other => return other,
-            }
-        }
-        Err(Error::Timeout)
-    }
 }
 
 impl<I2C: embedded_hal::i2c::I2c> zigbee_sensor::blocking::Sensor for Bmp180<I2C> {
@@ -402,8 +370,8 @@ impl<I2C: embedded_hal::i2c::I2c> zigbee_sensor::blocking::Sensor for Bmp180<I2C
     }
 
     /// After the temperature phase: start the pressure conversion and
-    /// return [`Error::NotReady`] (wait [`Bmp180::pending_wait_us`]).
-    /// After the pressure phase: the measurement.
+    /// return [`Error::Pending`] with its wait. After the pressure phase:
+    /// the measurement.
     fn read_measurement(&mut self) -> Result<Measurement, Error<I2C::Error>> {
         if self.state.phase == Phase::Idle {
             return Err(Error::NotReady);
@@ -411,10 +379,10 @@ impl<I2C: embedded_hal::i2c::I2c> zigbee_sensor::blocking::Sensor for Bmp180<I2C
         let mut frame = [0; LEN_FRAME];
         self.read(REG_CTRL_MEAS, &mut frame)?;
         match self.state.on_frame(&frame)? {
-            Step::StartPressure(cmd) => {
+            Step::StartPressure(cmd, wait) => {
                 self.write(REG_CTRL_MEAS, cmd)?;
                 self.state.phase = Phase::Pressure;
-                Err(Error::NotReady)
+                Err(Error::Pending(wait))
             }
             Step::Done(m) => Ok(m),
         }
@@ -486,23 +454,6 @@ pub mod asynch {
             self.state.calibration = Some(calibration);
             Ok(calibration)
         }
-
-        /// Run a complete cycle, awaiting both conversions on `delay`.
-        pub async fn measure_full<D: embedded_hal_async::delay::DelayNs>(
-            &mut self,
-            delay: &mut D,
-        ) -> Result<Measurement, Error<I2C::Error>> {
-            use zigbee_sensor::asynch::Sensor;
-            let mut wait = self.start_measurement().await?;
-            for _ in 0..4 {
-                delay.delay_us(wait).await;
-                match self.read_measurement().await {
-                    Err(Error::NotReady) => wait = self.pending_wait_us(),
-                    other => return other,
-                }
-            }
-            Err(Error::Timeout)
-        }
     }
 
     impl<I2C: I2c> zigbee_sensor::asynch::Sensor for Bmp180<I2C> {
@@ -525,10 +476,10 @@ pub mod asynch {
             let mut frame = [0; LEN_FRAME];
             self.read(REG_CTRL_MEAS, &mut frame).await?;
             match self.state.on_frame(&frame)? {
-                Step::StartPressure(cmd) => {
+                Step::StartPressure(cmd, wait) => {
                     self.write(REG_CTRL_MEAS, cmd).await?;
                     self.state.phase = Phase::Pressure;
-                    Err(Error::NotReady)
+                    Err(Error::Pending(wait))
                 }
                 Step::Done(m) => Ok(m),
             }
@@ -657,9 +608,8 @@ mod tests {
         assert_eq!(bmp.start_measurement().unwrap(), 4_500);
         assert_eq!(bmp.read_measurement(), Err(Error::NotReady));
         assert_eq!(bmp.phase(), Phase::Temperature);
-        assert_eq!(bmp.read_measurement(), Err(Error::NotReady));
+        assert_eq!(bmp.read_measurement(), Err(Error::Pending(4_500)));
         assert_eq!(bmp.phase(), Phase::Pressure);
-        assert_eq!(bmp.pending_wait_us(), 4_500);
         assert_eq!(
             bmp.read_measurement().unwrap(),
             Measurement {
@@ -691,8 +641,7 @@ mod tests {
         let mut bmp =
             Bmp180::new(&mut i2c, ADDRESS).with_oversampling(Oversampling::UltraHighResolution);
         bmp.start_measurement().unwrap();
-        assert_eq!(bmp.read_measurement(), Err(Error::NotReady));
-        assert_eq!(bmp.pending_wait_us(), 25_500);
+        assert_eq!(bmp.read_measurement(), Err(Error::Pending(25_500)));
         let m = bmp.read_measurement().unwrap();
         assert_eq!(
             Some(m),
@@ -721,7 +670,8 @@ mod tests {
     }
 
     #[test]
-    fn async_measure_full_awaits_both_conversions() {
+    fn async_measure_follows_pending_phase() {
+        use zigbee_sensor::asynch::Sensor as _;
         struct RecordingDelay(u32);
         impl embedded_hal_async::delay::DelayNs for RecordingDelay {
             async fn delay_ns(&mut self, ns: u32) {
@@ -743,7 +693,7 @@ mod tests {
         let mut i2c = Mock::new(&ex);
         let mut bmp = asynch::Bmp180::new(&mut i2c, ADDRESS);
         let mut delay = RecordingDelay(0);
-        let m = block_on(bmp.measure_full(&mut delay)).unwrap();
+        let m = block_on(bmp.measure(&mut delay)).unwrap();
         assert_eq!(m.temperature, 1_500);
         assert_eq!(delay.0, 4_500 + 7_500);
         i2c.done();

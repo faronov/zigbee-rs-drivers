@@ -18,7 +18,7 @@ one-shot mode. Both read `WHO_AM_I = 0xB4`, so the caller selects the
 Notes:
 
 * `Config { avg, full_scale }` is written to `CTRL_REG1`/`CTRL_REG2` by
-  `init()`. `FullScale::Hpa4060` on an LPS22DF returns `Unsupported`.
+  `init()`. `FullScale::Hpa4060` on an LPS22DF returns `InvalidArgument`.
 * The LPS28DFW datasheet text quotes a 2096 LSB/hPa mode-2 sensitivity in
   one place; its table, register description and worked example use 2048,
   which the driver follows.

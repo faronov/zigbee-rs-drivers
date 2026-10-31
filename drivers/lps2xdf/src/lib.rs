@@ -307,11 +307,11 @@ impl<IFACE: Interface> Lps2xdf<IFACE> {
     /// Check `WHO_AM_I` and write the configuration (power-down, AVG,
     /// full scale). Called by `start_measurement` if needed.
     ///
-    /// [`Error::Unsupported`] if [`FullScale::Hpa4060`] is requested on an
+    /// [`Error::InvalidArgument`] if [`FullScale::Hpa4060`] is requested on an
     /// LPS22DF.
     pub fn init(&mut self) -> Result<(), Error<IFACE::Error>> {
         if !self.check_config() {
-            return Err(Error::Unsupported);
+            return Err(Error::InvalidArgument);
         }
         let mut id = [0];
         self.read(REG_WHO_AM_I, &mut id)?;
@@ -444,7 +444,7 @@ pub mod asynch {
         /// See [`super::Lps2xdf::init`].
         pub async fn init(&mut self) -> Result<(), Error<IFACE::Error>> {
             if !self.check_config() {
-                return Err(Error::Unsupported);
+                return Err(Error::InvalidArgument);
             }
             let mut id = [0];
             self.read(REG_WHO_AM_I, &mut id).await?;
@@ -582,7 +582,7 @@ mod tests {
                 avg: Avg::X4,
                 full_scale: FullScale::Hpa4060,
             });
-        assert_eq!(lps.start_measurement(), Err(Error::Unsupported));
+        assert_eq!(lps.start_measurement(), Err(Error::InvalidArgument));
         i2c.done();
 
         let a = ADDRESS_SA0_LOW;

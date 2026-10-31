@@ -21,10 +21,10 @@ interfaces exist, each with its own driver:
 
 Notes:
 
-* Pressure is signed (vacuum and differential ranges). `Readings` emits
-  `Quantity::Pressure` only when it is non-negative; use
-  `Measurement::pressure` / `pressure_centi` directly otherwise.
-* `Xgzp::new(i2c, k)`: take K from `k_for_full_scale(largest absolute
+* Pressure is signed (vacuum and differential ranges). `Readings` emits it
+  as `Quantity::GaugePressure` (Pa, may be negative), never as barometric
+  `Quantity::Pressure`; `Measurement::pressure_centi` keeps 0.01 Pa.
+* `Xgzp::new(i2c, k)` (`k = 0` gives `InvalidArgument` at start): take K from `k_for_full_scale(largest absolute
   pressure of the range in Pa)` (−100…100, −100…0 and 0…100 kPa all use
   64; up to 1.5 MPa) or from the part's datasheet. Below 1 kPa it returns
   the XGZP6897D value 8192 (the XGZP6847D table stops at 1 kPa). There is
@@ -36,11 +36,12 @@ Notes:
   the ID register (it holds the address in bits 7:1), reads the
   temperature calibration (0x20/0x21) and switches from the power-on
   normal mode to sleep, keeping the factory oversampling.
+  `start_measurement()` returns `InvalidArgument` if `pmax <= pmin` or the
+  span exceeds `MAX_SPAN_PA` (5 MPa).
 * `XgzpC` two-phase cycle, as in `zigbee-bmp180`: `start_measurement()`
   starts the temperature conversion; the first `read_measurement()` reads
-  it, starts the pressure conversion and returns `NotReady`; wait
-  `pending_wait_us()` and read again. `measure_full(delay)` (blocking and
-  async) runs the whole cycle; the generic `measure()` stops at `NotReady`.
+  it, starts the pressure conversion and returns `Error::Pending(wait_us)`;
+  wait that long and read again. The `measure()` helpers follow this phase.
 * `XgzpC` assumptions: the datasheet gives no conversion time and no ready
   flag, so each phase waits 20 ms (the vendor sample's wait). `ONE_PT` = 1
   is taken to select pressure ("measure the temperature or pressure signal

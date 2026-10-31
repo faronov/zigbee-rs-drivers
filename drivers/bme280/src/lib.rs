@@ -183,8 +183,9 @@ pub enum Filter {
 /// Measurement configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Config {
-    /// Temperature oversampling. Must not be [`Oversampling::Skip`] if
-    /// pressure or humidity is wanted (they need `t_fine`).
+    /// Temperature oversampling. Must not be [`Oversampling::Skip`]:
+    /// pressure and humidity need `t_fine` (`set_config` returns
+    /// `InvalidArgument`).
     pub temperature: Oversampling,
     /// Pressure oversampling.
     pub pressure: Oversampling,
@@ -553,7 +554,11 @@ impl<IFACE: Interface> Bme280<IFACE> {
     }
 
     /// Write a new configuration (device left in sleep mode).
+    /// [`Error::InvalidArgument`] if the temperature is skipped.
     pub fn set_config(&mut self, config: Config) -> Result<(), Error<IFACE::Error>> {
+        if config.temperature == Oversampling::Skip {
+            return Err(Error::InvalidArgument);
+        }
         self.config = config;
         // Sleep first: `config` writes may be ignored in normal mode.
         self.write(REG_CTRL_MEAS, config.ctrl_meas(false))?;
@@ -719,6 +724,9 @@ pub mod asynch {
 
         /// See [`super::Bme280::set_config`].
         pub async fn set_config(&mut self, config: Config) -> Result<(), Error<IFACE::Error>> {
+            if config.temperature == crate::Oversampling::Skip {
+                return Err(Error::InvalidArgument);
+            }
             self.config = config;
             self.write(REG_CTRL_MEAS, config.ctrl_meas(false)).await?;
             self.write(REG_CONFIG, config.config()).await?;
@@ -977,6 +985,18 @@ mod tests {
         let mut i2c = I2cMock::new(&tx);
         let mut bme = Bme280::new_i2c(&mut i2c, PRIMARY_ADDRESS);
         assert_eq!(bme.init(), Err(Error::UnexpectedId(0x61)));
+        i2c.done();
+    }
+
+    #[test]
+    fn skipped_temperature_is_invalid() {
+        let mut i2c = I2cMock::new(&[]);
+        let mut bme = Bme280::new_i2c(&mut i2c, PRIMARY_ADDRESS);
+        let c = Config {
+            temperature: Oversampling::Skip,
+            ..Config::WEATHER
+        };
+        assert_eq!(bme.set_config(c), Err(Error::InvalidArgument));
         i2c.done();
     }
 

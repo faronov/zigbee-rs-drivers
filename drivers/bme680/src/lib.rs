@@ -226,7 +226,8 @@ pub enum Filter {
 /// Heater set-point for the gas measurement (heater step 0).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Heater {
-    /// Target hot-plate temperature in °C (200..=400 typical).
+    /// Target hot-plate temperature in °C, at most 400 (200..=400
+    /// typical).
     pub temperature: u16,
     /// Heating time in ms, 1..=4032 (encoded with a ×1/×4/×16/×64 factor).
     pub duration_ms: u16,
@@ -283,6 +284,16 @@ impl Config {
             duration_ms: 100,
         }),
     };
+
+    /// Temperature not skipped; heater (if any) at most 400 °C for
+    /// 1..=4032 ms.
+    pub const fn is_valid(&self) -> bool {
+        let heater_ok = match self.heater {
+            None => true,
+            Some(h) => h.temperature <= 400 && h.duration_ms >= 1 && h.duration_ms <= 4032,
+        };
+        heater_ok && !matches!(self.temperature, Oversampling::Skip)
+    }
 
     /// `ctrl_meas` (`osrs_t`, `osrs_p`, `mode`).
     pub const fn ctrl_meas(&self, forced: bool) -> u8 {
@@ -799,7 +810,11 @@ impl<IFACE: Interface> Bme680<IFACE> {
     }
 
     /// Write a new configuration (device left in sleep mode).
+    /// [`Error::InvalidArgument`] unless [`Config::is_valid`].
     pub fn set_config(&mut self, config: Config) -> Result<(), Error<IFACE::Error>> {
+        if !config.is_valid() {
+            return Err(Error::InvalidArgument);
+        }
         self.state.config = config;
         if let Some(variant) = self.state.variant {
             for (reg, value) in self.state.config_writes(variant) {
@@ -978,6 +993,9 @@ pub mod asynch {
 
         /// See [`super::Bme680::set_config`].
         pub async fn set_config(&mut self, config: Config) -> Result<(), Error<IFACE::Error>> {
+            if !config.is_valid() {
+                return Err(Error::InvalidArgument);
+            }
             self.state.config = config;
             if let Some(variant) = self.state.variant {
                 for (reg, value) in self.state.config_writes(variant) {
@@ -1280,6 +1298,32 @@ mod tests {
         assert_eq!(Config::DEFAULT.ctrl_meas(true), 0x55);
         assert_eq!(Config::DEFAULT.ctrl_gas_1(Variant::Bme680), 0x10);
         assert_eq!(Config::DEFAULT.ctrl_gas_1(Variant::Bme688), 0x20);
+    }
+
+    #[test]
+    fn invalid_config_is_rejected() {
+        let mut i2c = I2cMock::new(&[]);
+        let mut bme = Bme680::new_i2c(&mut i2c, PRIMARY_ADDRESS);
+        let heater = |temperature, duration_ms| Config {
+            heater: Some(Heater {
+                temperature,
+                duration_ms,
+            }),
+            ..Config::DEFAULT
+        };
+        for c in [
+            heater(401, 100),
+            heater(300, 0),
+            heater(300, 4_033),
+            Config {
+                temperature: Oversampling::Skip,
+                ..Config::DEFAULT
+            },
+        ] {
+            assert_eq!(bme.set_config(c), Err(Error::InvalidArgument));
+        }
+        assert_eq!(bme.set_config(heater(400, 4_032)), Ok(()));
+        i2c.done();
     }
 
     fn field(variant: Variant, new_data: bool) -> [u8; LEN_FIELD] {
